@@ -28,6 +28,8 @@ export async function generateMetadata() {
 }
 
 export default function About() {
+  const education = about.education;
+  const certifications = about.certifications;
   const structure = [
     {
       title: about.intro.title,
@@ -40,15 +42,28 @@ export default function About() {
       items: about.work.experiences.map((experience) => experience.company),
     },
     {
-      title: about.studies.title,
-      display: about.studies.display,
-      items: about.studies.institutions.map((institution) => institution.name),
-    },
-    {
       title: about.technical.title,
       display: about.technical.display,
       items: about.technical.skills.map((skill) => skill.title),
     },
+    ...(education
+      ? [
+          {
+            title: education.title,
+            display: education.display,
+            items: education.institutions.map((institution) => institution.name),
+          },
+        ]
+      : []),
+    ...(certifications
+      ? [
+          {
+            title: certifications.title,
+            display: certifications.display,
+            items: certifications.certifications.map((certification) => certification.name),
+          },
+        ]
+      : []),
   ];
   return (
     <Column maxWidth="m">
@@ -261,26 +276,6 @@ export default function About() {
             </>
           )}
 
-          {about.studies.display && (
-            <>
-              <Heading as="h2" id={about.studies.title} variant="display-strong-s" marginBottom="m">
-                {about.studies.title}
-              </Heading>
-              <Column fillWidth gap="l" marginBottom="40">
-                {about.studies.institutions.map((institution, index) => (
-                  <Column key={`${institution.name}-${index}`} fillWidth gap="4">
-                    <Text id={institution.name} variant="heading-strong-l">
-                      {institution.name}
-                    </Text>
-                    <Text variant="heading-default-xs" onBackground="neutral-weak">
-                      {institution.description}
-                    </Text>
-                  </Column>
-                ))}
-              </Column>
-            </>
-          )}
-
           {about.technical.display && (
             <>
               <Heading
@@ -330,6 +325,56 @@ export default function About() {
                         ))}
                       </Row>
                     )}
+                  </Column>
+                ))}
+              </Column>
+            </>
+          )}
+
+          {education?.display && (
+            <>
+              <Heading
+                as="h2"
+                id={education.title}
+                variant="display-strong-s"
+                marginBottom="m"
+              >
+                {education.title}
+              </Heading>
+              <Column fillWidth gap="l" marginBottom="40">
+                {education.institutions.map((institution, index) => (
+                  <Column key={`${institution.name}-${index}`} fillWidth gap="4">
+                    <Text id={institution.name} variant="heading-strong-l">
+                      {institution.name}
+                    </Text>
+                    <Text variant="heading-default-xs" onBackground="neutral-weak">
+                      {institution.description}
+                    </Text>
+                  </Column>
+                ))}
+              </Column>
+            </>
+          )}
+
+          {certifications?.display && (
+            <>
+              <Heading
+                as="h2"
+                id={certifications.title}
+                variant="display-strong-s"
+                marginBottom="m"
+              >
+                {certifications.title}
+              </Heading>
+              <Column fillWidth gap="l" marginBottom="40">
+                {certifications.certifications.map((certification, index) => (
+                  <Column key={`${certification.name}-${index}`} fillWidth gap="4">
+                    <Text id={certification.name} variant="heading-strong-l">
+                      {certification.name}
+                    </Text>
+                    <Text variant="heading-default-xs" onBackground="neutral-weak">
+                      {certification.description}
+                    </Text>
                   </Column>
                 ))}
               </Column>

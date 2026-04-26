@@ -97,7 +97,7 @@ export interface Home extends BasePageConfig {
   featured: {
     display: boolean;
     title: React.ReactNode;
-    href: string;
+    href?: string;
   };
   /** The sub text which appears below the headline */
   subline: React.ReactNode;
@@ -105,7 +105,7 @@ export interface Home extends BasePageConfig {
 
 /**
  * About page configuration.
- * @description Configuration for the About page, including sections for table of contents, avatar, calendar, introduction, work experience, studies, and technical skills.
+ * @description Configuration for the About page, including sections for table of contents, avatar, calendar, introduction, work experience, education, certifications, optional studies, and technical skills.
  */
 export interface About extends BasePageConfig {
   /** Table of contents configuration */
@@ -165,8 +165,22 @@ export interface About extends BasePageConfig {
       }>;
     }>;
   };
+  /** Education section */
+  education?: {
+    /** Whether to display the education section */
+    display: boolean;
+    /** Title for the education section */
+    title: string;
+    /** List of education entries */
+    institutions: Array<{
+      /** Institution name */
+      name: string;
+      /** Description of education */
+      description: React.ReactNode;
+    }>;
+  };
   /** Studies/education section */
-  studies: {
+  studies?: {
     /** Whether to display studies section */
     display: boolean;
     /** Title for the studies section */
@@ -176,6 +190,20 @@ export interface About extends BasePageConfig {
       /** Institution name */
       name: string;
       /** Description of studies */
+      description: React.ReactNode;
+    }>;
+  };
+  /** Certifications section */
+  certifications?: {
+    /** Whether to display the certifications section */
+    display: boolean;
+    /** Title for the certifications section */
+    title: string;
+    /** List of certification entries */
+    certifications: Array<{
+      /** Certification name */
+      name: string;
+      /** Description of the certification */
       description: React.ReactNode;
     }>;
   };

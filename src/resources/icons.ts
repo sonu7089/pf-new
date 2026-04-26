@@ -9,7 +9,7 @@ import {
   HiArrowRight,
   HiOutlineEye,
   HiOutlineEyeSlash,
-  HiOutlineDocument,
+  HiDocumentArrowDown,
   HiOutlineGlobeAsiaAustralia,
   HiOutlineRocketLaunch,
 } from "react-icons/hi2";
@@ -52,7 +52,7 @@ export const iconLibrary: Record<string, IconType> = {
   twitter: FaXTwitter,
   threads: FaThreads,
   arrowUpRightFromSquare: HiArrowTopRightOnSquare,
-  document: HiOutlineDocument,
+  document: HiDocumentArrowDown,
   rocket: HiOutlineRocketLaunch,
   javascript: SiJavascript,
   nextjs: SiNextdotjs,

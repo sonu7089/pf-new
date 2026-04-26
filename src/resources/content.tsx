@@ -2,14 +2,14 @@ import { About, Blog, Gallery, Home, Newsletter, Person, Social, Work } from "@/
 import { Line, Row, Text } from "@once-ui-system/core";
 
 const person: Person = {
-  firstName: "Selene",
-  lastName: "Yu",
-  name: `Selene Yu`,
-  role: "Design Engineer",
+  firstName: "Nitish",
+  lastName: "Songara",
+  name: `Nitish Songara`,
+  role: "Data Engineer",
   avatar: "/images/avatar.jpg",
-  email: "example@gmail.com",
-  location: "Asia/Jakarta", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
-  languages: ["English", "Bahasa"], // optional: Leave the array empty if you don't want to display languages
+  email: "nitishsongara75@gmail.com",
+  location: "Asia/Kolkata", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
+  languages: ["English", "Hindi"], // optional: Leave the array empty if you don't want to display languages
 };
 
 const newsletter: Newsletter = {
@@ -25,31 +25,25 @@ const social: Social = [
   {
     name: "GitHub",
     icon: "github",
-    link: "https://github.com/once-ui-system",
+    link: "https://github.com/sonu7089",
     essential: true,
   },
   {
     name: "LinkedIn",
     icon: "linkedin",
-    link: "https://www.linkedin.com/company/once-ui/",
-    essential: true,
-  },
-  {
-    name: "Instagram",
-    icon: "instagram",
-    link: "https://www.instagram.com/once_ui/",
-    essential: false,
-  },
-  {
-    name: "Threads",
-    icon: "threads",
-    link: "https://www.threads.com/@once_ui",
+    link: "https://www.linkedin.com/in/nitishsongara1/",
     essential: true,
   },
   {
     name: "Email",
     icon: "email",
     link: `mailto:${person.email}`,
+    essential: true,
+  },
+  {
+    name: "Download Resume",
+    icon: "document",
+    link: "/NitishSongaraResume.pdf",
     essential: true,
   },
 ];
@@ -60,24 +54,23 @@ const home: Home = {
   label: "Home",
   title: `${person.name}'s Portfolio`,
   description: `Portfolio website showcasing my work as a ${person.role}`,
-  headline: <>Building bridges between design and code</>,
+  headline: <>Building Reliable Pipelines and Analytics Systems</>,
   featured: {
     display: true,
     title: (
       <Row gap="12" vertical="center">
-        <strong className="ml-4">Once UI</strong>{" "}
+        <strong className="ml-4">Nitish Songara</strong>{" "}
         <Line background="brand-alpha-strong" vert height="20" />
         <Text marginRight="4" onBackground="brand-medium">
-          Featured work
+          Data Engineer
         </Text>
       </Row>
     ),
-    href: "/work/building-once-ui-a-customizable-design-system",
   },
   subline: (
     <>
-    I'm Selene, a design engineer at <Text as="span" size="xl" weight="strong">ONCE UI</Text>, where I craft intuitive <br /> user experiences. After hours, I build my own projects.
-</>
+      I'm Nitish, a data engineer and I design and optimize data workflows that turn raw, messy data into scalable, business-ready insights.
+    </>
   ),
 };
 
@@ -95,16 +88,20 @@ const about: About = {
   },
   calendar: {
     display: true,
-    link: "https://cal.com",
+    link: "https://calendly.com/nitishsongara75/new-meeting",
   },
   intro: {
     display: true,
     title: "Introduction",
     description: (
       <>
-        Selene is a Jakarta-based design engineer with a passion for transforming complex challenges
-        into simple, elegant design solutions. Her work spans digital interfaces, interactive
-        experiences, and the convergence of design and technology.
+        <p>
+          Data Engineer with 5+ years of experience building scalable ETL/ELT pipelines, analytics-ready datasets, and cloud-based data solutions across ad-tech and enterprise environments. I specialize in solving complex data problems and designing practical, scalable solutions using Python, SQL, PySpark, Databricks, Airflow, and cloud platforms. My work includes ingesting data from files, databases, and APIs, transforming it into reliable data models, and enabling reporting, optimization, and business decision-making.
+
+        </p>
+        <p>
+          I also use AI to accelerate solution design, troubleshoot pipelines, improve SQL and Python productivity, and speed up testing and documentation. Combined with strong engineering judgment, data quality checks, monitoring, and performance optimization, this allows me to deliver maintainable, production-ready data systems with measurable business impact.
+        </p>
       </>
     ),
   },
@@ -113,120 +110,271 @@ const about: About = {
     title: "Work Experience",
     experiences: [
       {
-        company: "FLY",
-        timeframe: "2022 - Present",
-        role: "Senior Design Engineer",
+        company: "Ascendeum",
+        timeframe: "June 2025 - Present",
+        role: "Associate Data Engineer",
         achievements: [
           <>
-            Redesigned the UI/UX for the FLY platform, resulting in a 20% increase in user
-            engagement and 30% faster load times.
+            Built and automated end-to-end ETL pipelines processing 500M+ ad-tech events per month
+            from Amazon S3 into MongoDB, powering analytics dashboards used by 50+ stakeholders.
           </>,
           <>
-            Spearheaded the integration of AI tools into design workflows, enabling designers to
-            iterate 50% faster.
+            Migrated batch processing workflows from Pandas to PySpark, delivering nearly 5x faster
+            processing on 200GB+ daily datasets while improving stability at scale.
+          </>,
+          <>
+            Designed a reusable multi-client ingestion framework for API-based datasets and
+            orchestrated pipelines in Apache Airflow with retries, dependencies, scheduling, and
+            backfills.
+          </>,
+          <>
+            Modeled raw event and ad auction data into analytics-ready datasets and partnered with
+            business teams on reporting and recommendations that contributed to a 12% to 15%
+            increase in client ROI.
           </>,
         ],
-        images: [
-          // optional: leave the array empty if you don't want to display images
-          {
-            src: "/images/projects/project-01/cover-01.jpg",
-            alt: "Once UI Project",
-            width: 16,
-            height: 9,
-          },
-        ],
+        images: [],
       },
       {
-        company: "Creativ3",
-        timeframe: "2018 - 2022",
-        role: "Lead Designer",
+        company: "Deloitte",
+        timeframe: "August 2021 - May 2025",
+        role: "Data Engineer",
         achievements: [
           <>
-            Developed a design system that unified the brand across multiple platforms, improving
-            design consistency by 40%.
+            Designed and maintained Azure Data Factory and Azure Databricks pipelines to ingest and
+            transform data from 10+ sources, processing 20M+ records weekly and around 1TB per
+            month.
           </>,
           <>
-            Led a cross-functional team to launch a new product line, contributing to a 15% increase
-            in overall company revenue.
+            Built reusable PySpark and SQL components, including standardized transformations and
+            parameterized logic, reducing pipeline development time by 30%.
+          </>,
+          <>
+            Developed curated SQL models and reporting views for dashboards used by 200+ users,
+            improving query performance by 40%.
+          </>,
+          <>
+            Improved pipeline reliability to 99.9% uptime using automated data quality checks,
+            proactive monitoring and alerting, and schema evolution handling.
           </>,
         ],
         images: [],
       },
     ],
   },
-  studies: {
+  technical: {
     display: true, // set to false to hide this section
-    title: "Studies",
-    institutions: [
+    title: "Technical Skills",
+    skills: [
       {
-        name: "University of Jakarta",
-        description: <>Studied software engineering.</>,
+        title: "Languages & Processing",
+        description: (
+          <>
+            Core languages and data-processing tools I use to write transformation logic, build
+            pipelines, and work through large datasets efficiently.
+          </>
+        ),
+        tags: [
+          { name: "Python" },
+          { name: "SQL" },
+          { name: "PySpark" },
+          { name: "Java" },
+          {
+            name: "Pandas",
+          },
+        ],
+        images: [],
       },
       {
-        name: "Build the Future",
-        description: <>Studied online marketing and personal branding.</>,
+        title: "Data Engineering",
+        description: (
+          <>
+            End-to-end pipeline work focused on reliable ingestion, transformation, validation, and
+            performance tuning for analytics-ready data products.
+          </>
+        ),
+        tags: [
+          { name: "ETL/ELT" },
+          { name: "Batch Processing" },
+          { name: "Data Pipeline Development" },
+          { name: "Data Modeling" },
+          { name: "Data Quality" },
+          { name: "Schema Evolution" },
+          { name: "Data Validation" },
+          { name: "Performance Optimization" },
+          { name: "Query Optimization" },
+        ],
+        images: [],
+      },
+      {
+        title: "Platforms & Tools",
+        description: (
+          <>
+            Cloud and data platforms I have used to build, orchestrate, store, and deliver
+            production workloads across multiple environments.
+          </>
+        ),
+        tags: [
+          { name: "Databricks" },
+          { name: "Apache Airflow" },
+          { name: "MongoDB" },
+          { name: "SQL Server" },
+          { name: "BigQuery" },
+          { name: "Snowflake" },
+          { name: "AWS" },
+          { name: "Azure" },
+          { name: "GCP" },
+          { name: "Docker" },
+          { name: "Git" },
+        ],
+        images: [],
+      },
+      {
+        title: "Analytics & Reporting",
+        description: (
+          <>
+            Reporting and analytics skills used to turn curated datasets into dashboards, KPIs,
+            and decision-support views for business stakeholders.
+          </>
+        ),
+        tags: [
+          { name: "Power BI" },
+          { name: "KPI Development" },
+          { name: "Reporting Views" },
+          { name: "Dashboard Enablement" },
+          { name: "Business Analytics" },
+        ],
+        images: [],
+      },
+      {
+        title: "AI-Assisted Development",
+        description: (
+          <>
+            AI-enabled workflows that speed up prototyping, debugging, documentation, test
+            generation, and solution design without losing engineering judgment.
+          </>
+        ),
+        tags: [
+          { name: "AI tools in workflow" },
+          { name: "Claude Code" },
+          { name: "Codex" },
+          { name: "Antigravity" },
+          { name: "OpenCode" },
+          { name: "Kilo" },
+          { name: "AI skills" },
+          { name: "Prompt-driven prototyping" },
+          { name: "SQL and Python acceleration" },
+          { name: "Debugging support" },
+          { name: "Documentation and tests" },
+          { name: "LLM API integration" },
+        ],
+        images: [],
+      },
+      {
+        title: "Core Strengths",
+        description: (
+          <>
+            The working habits and collaboration skills that support delivery, reliability, and
+            maintainability across projects.
+          </>
+        ),
+        tags: [
+          { name: "Problem Solving" },
+          { name: "Stakeholder Communication" },
+          { name: "Requirement Gathering" },
+          { name: "Ownership" },
+          { name: "Fast Learning" },
+          { name: "Maintainable Design" },
+        ],
+        images: [],
       },
     ],
   },
-  technical: {
-    display: true, // set to false to hide this section
-    title: "Technical skills",
-    skills: [
+  education: {
+    display: true,
+    title: "Education",
+    institutions: [
       {
-        title: "Figma",
+        name: "Master of Business Administration - Finance",
         description: (
-          <>Able to prototype in Figma with Once UI with unnatural speed.</>
+          <>
+            Lakshmi Narain College of Technology, Bhopal
+            <br />
+            <em>October 2021 - August 2023</em>
+            <br />
+            Completed alongside a full-time role at Deloitte.
+          </>
         ),
-        tags: [
-          {
-            name: "Figma",
-            icon: "figma",
-          },
-        ],
-        // optional: leave the array empty if you don't want to display images
-        images: [
-          {
-            src: "/images/projects/project-01/cover-02.jpg",
-            alt: "Project image",
-            width: 16,
-            height: 9,
-          },
-          {
-            src: "/images/projects/project-01/cover-03.jpg",
-            alt: "Project image",
-            width: 16,
-            height: 9,
-          },
-        ],
       },
       {
-        title: "Next.js",
+        name: "Bachelor of Engineering - Information Technology",
         description: (
-          <>Building next gen apps with Next.js + Once UI + Supabase.</>
+          <>
+            Institute of Engineering & Technology (IET DAVV), Indore
+            <br />
+            <em>July 2017 - July 2021</em>
+          </>
         ),
-        tags: [
-          {
-            name: "JavaScript",
-            icon: "javascript",
-          },
-          {
-            name: "Next.js",
-            icon: "nextjs",
-          },
-          {
-            name: "Supabase",
-            icon: "supabase",
-          },
-        ],
-        // optional: leave the array empty if you don't want to display images
-        images: [
-          {
-            src: "/images/projects/project-01/cover-04.jpg",
-            alt: "Project image",
-            width: 16,
-            height: 9,
-          },
-        ],
+      },
+    ],
+  },
+  certifications: {
+    display: true,
+    title: "Certifications",
+    certifications: [
+      {
+        name: "Microsoft Certified: Azure Data Engineer Associate",
+        description: (
+          <>
+            Microsoft
+            <br />
+            <em>February 2023</em>
+            <br />
+            <a
+              href="https://learn.microsoft.com/en-us/training/courses/dp-203t00"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View Certification
+            </a>
+          </>
+        ),
+      },
+      {
+        name: "Microsoft Certified: Azure Database Administrator Associate",
+        description: (
+          <>
+            Microsoft
+            <br />
+            <em>May 2023</em>
+            <br />
+            <a
+              href="https://learn.microsoft.com/en-us/credentials/certifications/azure-database-administrator-associate/?practice-assessment-type=certification"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View Certification
+            </a>
+          </>
+        ),
+      },
+      {
+        name: "Microsoft Certified: Azure Data Fundamentals",
+        description: (
+          <>
+            Microsoft
+            <br />
+            <em>June 2023</em>
+            <br />
+            <a
+              href="https://learn.microsoft.com/en-us/credentials/certifications/azure-data-fundamentals/?practice-assessment-type=certification"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View Certification
+            </a>
+          </>
+        ),
       },
     ],
   },
