@@ -1,7 +1,7 @@
 # Nitish Songara
 ## Data Engineer
 
-📍 **Location:** Bhopal, India  
+📍 **Location:** Asia/Kolkata  
 📧 **Email:** [nitishsongara75@gmail.com](mailto:nitishsongara75@gmail.com)  
 📞 **Phone:** +91 98277 32220  
 🔗 **LinkedIn:** [linkedin.com/in/nitishsongara1](https://www.linkedin.com/in/nitishsongara1/)  

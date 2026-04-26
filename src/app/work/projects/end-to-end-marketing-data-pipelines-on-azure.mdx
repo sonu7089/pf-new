@@ -1,0 +1,53 @@
+---
+title: "End-to-End Marketing Data Pipelines on Azure"
+publishedAt: "2026-04-21"
+summary: "Enterprise-grade Azure ETL and ELT pipelines built for marketing data, processing 20M+ records weekly into analytics-ready models for Power BI."
+images:
+  - "/images/projects/project_4.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+---
+
+## Overview
+
+This project focused on building a dependable Azure-based marketing data platform that could absorb high-volume records, reconcile multiple source formats, and serve clean, trusted datasets to reporting teams. The work spanned ingestion, transformation, validation, storage, and performance tuning, with reliability treated as a hard requirement rather than a nice-to-have.
+
+## Scope
+
+The pipelines were designed to process more than 20 million records each week while keeping reporting fast and operational issues visible. Data arrived in different shapes and levels of quality, so the system needed both flexibility and discipline.
+
+- Ingest data from Parquet, Delta, CSV, Excel, and REST API sources.
+- Load curated data into Delta Lake and SQL Server for downstream reporting.
+- Support mission-critical Power BI dashboards used for business decisions.
+- Keep delivery stable through validation, monitoring, and schema-aware processing.
+
+## Platform Design
+
+The architecture combined orchestration in Azure Data Factory with scalable transformations in Databricks and Python. That split kept the control flow explicit while allowing heavier PySpark workloads to run where they belonged.
+
+- **Azure Data Factory** handled scheduling, dependency management, and movement across source systems.
+- **Databricks and PySpark** powered modular transformations for cleansing, standardization, and enrichment.
+- **Delta Lake and SQL Server** provided reliable storage layers for analytics-ready consumption.
+- **Validation and logging layers** captured quality issues, schema drift, and processing failures early.
+
+## Engineering Highlights
+
+- Built ETL and ELT pipelines that processed 20M+ records weekly across mixed structured sources.
+- Automated data validation, quality checks, schema evolution handling, and error logging to reach 99.9% pipeline reliability.
+- Improved maintainability by using modular PySpark transformations instead of tightly coupled one-off jobs.
+- Tuned database and transformation performance to help deliver analytics roughly 40% faster for stakeholders.
+
+## Skills and Deliverables
+
+- Microsoft Azure
+- PySpark
+- SQL
+- Microsoft Power BI
+- ETL
+
+## Outcome
+
+The result was a production-ready data pipeline layer that supported faster marketing analytics without sacrificing trust in the numbers. It shows the kind of system I like building most: high-volume, observable, resilient, and shaped for real reporting workloads rather than demo-scale data flows.

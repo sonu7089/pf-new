@@ -1,4 +1,4 @@
-import { About, Blog, Gallery, Home, Newsletter, Person, Social, Work } from "@/types";
+import { About, Blog, Home, Newsletter, Person, Social, Work } from "@/types";
 import { Line, Row, Text } from "@once-ui-system/core";
 
 const person: Person = {
@@ -6,7 +6,7 @@ const person: Person = {
   lastName: "Songara",
   name: `Nitish Songara`,
   role: "Data Engineer",
-  avatar: "/images/avatar.jpg",
+  avatar: "/images/pfp.jpg",
   email: "nitishsongara75@gmail.com",
   location: "Asia/Kolkata", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
   languages: ["English", "Hindi"], // optional: Leave the array empty if you don't want to display languages
@@ -14,8 +14,8 @@ const person: Person = {
 
 const newsletter: Newsletter = {
   display: true,
-  title: <>Subscribe to {person.firstName}'s Newsletter</>,
-  description: <>My weekly newsletter about creativity and engineering</>,
+  title: <>Let's Connect!</>,
+  description: <></>,
 };
 
 const social: Social = [
@@ -109,6 +109,39 @@ const about: About = {
     display: true, // set to false to hide this section
     title: "Work Experience",
     experiences: [
+      {
+        company: "Insight Global (Walmart)",
+        timeframe: "September 2025 - Present",
+        role: "Data Engineer · Contract / Remote",
+        achievements: [
+          <>
+            Work with the data normalization team to normalize large-scale IoT telemetry sensor
+            data for the Canada market, transforming vendor and store-specific inputs into
+            standardized datasets used by downstream alarm workflows.
+          </>,
+          <>
+            Built the normalization framework from scratch with rules and configuration separated from code,
+            making config and rule tuning easier and reducing the need for code changes when business logic
+            evolves across vendors, stores, and telemetry scenarios.
+          </>,
+          <>
+            Created a CI/CD workflow so rule updates committed in GitHub automatically propagate to
+            Azure SQL, improving change traceability and making it clear who updated normalization
+            rules and when.
+          </>,
+          <>
+            Set up email alerts, added unit tests to protect existing functionality, and supported
+            reliable delivery across a stack including BigQuery, Azure SQL, PySpark, Dataproc,
+            Airflow, Jenkins, Docker, GitHub, and Looker for internal monitoring.
+          </>,
+          <>
+            Partner closely with the business side to translate operational requirements into
+            normalization rules, requiring deep domain understanding in addition to pipeline and
+            platform engineering.
+          </>,
+        ],
+        images: [],
+      },
       {
         company: "Ascendeum",
         timeframe: "June 2025 - Present",
@@ -398,55 +431,4 @@ const work: Work = {
   // All projects will be listed on the /home and /work routes
 };
 
-const gallery: Gallery = {
-  path: "/gallery",
-  label: "Gallery",
-  title: `Photo gallery – ${person.name}`,
-  description: `A photo collection by ${person.name}`,
-  // Images by https://lorant.one
-  // These are placeholder images, replace with your own
-  images: [
-    {
-      src: "/images/gallery/horizontal-1.jpg",
-      alt: "image",
-      orientation: "horizontal",
-    },
-    {
-      src: "/images/gallery/vertical-4.jpg",
-      alt: "image",
-      orientation: "vertical",
-    },
-    {
-      src: "/images/gallery/horizontal-3.jpg",
-      alt: "image",
-      orientation: "horizontal",
-    },
-    {
-      src: "/images/gallery/vertical-1.jpg",
-      alt: "image",
-      orientation: "vertical",
-    },
-    {
-      src: "/images/gallery/vertical-2.jpg",
-      alt: "image",
-      orientation: "vertical",
-    },
-    {
-      src: "/images/gallery/horizontal-2.jpg",
-      alt: "image",
-      orientation: "horizontal",
-    },
-    {
-      src: "/images/gallery/horizontal-4.jpg",
-      alt: "image",
-      orientation: "horizontal",
-    },
-    {
-      src: "/images/gallery/vertical-3.jpg",
-      alt: "image",
-      orientation: "vertical",
-    },
-  ],
-};
-
-export { person, social, newsletter, home, about, blog, work, gallery };
+export { person, social, newsletter, home, about, blog, work };

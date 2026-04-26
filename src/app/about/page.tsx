@@ -12,7 +12,7 @@ import {
   Schema,
   Row,
 } from "@once-ui-system/core";
-import { baseURL, about, person, social } from "@/resources";
+import { baseURL, about, person } from "@/resources";
 import TableOfContents from "@/components/about/TableOfContents";
 import styles from "@/components/about/about.module.scss";
 import React from "react";
@@ -30,6 +30,13 @@ export async function generateMetadata() {
 export default function About() {
   const education = about.education;
   const certifications = about.certifications;
+  const phoneNumber = "+91 98277 32220";
+  const contactLinks = {
+    github: "https://github.com/sonu7089",
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/",
+    leetCode: "https://leetcode.com/u/sonu7089/",
+    resume: "/NitishSongaraResume.pdf",
+  };
   const structure = [
     {
       title: about.intro.title,
@@ -167,48 +174,65 @@ export default function About() {
             >
               {person.role}
             </Text>
-            {social.length > 0 && (
-              <Row
-                className={styles.blockAlign}
-                paddingTop="20"
-                paddingBottom="8"
-                gap="8"
-                wrap
-                horizontal="center"
-                fitWidth
-                data-border="rounded"
-              >
-                {social
-                      .filter((item) => item.essential)
-                      .map(
-                  (item) =>
-                    item.link && (
-                      <React.Fragment key={item.name}>
-                        <Row s={{ hide: true }}>
-                          <Button
-                            key={item.name}
-                            href={item.link}
-                            prefixIcon={item.icon}
-                            label={item.name}
-                            size="s"
-                            weight="default"
-                            variant="secondary"
-                          />
-                        </Row>
-                        <Row hide s={{ hide: false }}>
-                          <IconButton
-                            size="l"
-                            key={`${item.name}-icon`}
-                            href={item.link}
-                            icon={item.icon}
-                            variant="secondary"
-                          />
-                        </Row>
-                      </React.Fragment>
-                    ),
-                )}
+            <Column
+              className={styles.blockAlign}
+              paddingTop="20"
+              paddingBottom="8"
+              gap="8"
+              horizontal="start"
+              fitWidth
+            >
+              <Row gap="8" wrap horizontal="start" fitWidth data-border="rounded">
+                <Button
+                  href={`mailto:${person.email}`}
+                  prefixIcon="email"
+                  label={person.email}
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
+                <Button
+                  href={`tel:${phoneNumber.replace(/\s+/g, "")}`}
+                  label={phoneNumber}
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
               </Row>
-            )}
+              <Row gap="8" wrap horizontal="start" fitWidth data-border="rounded">
+                <Button
+                  href={contactLinks.github}
+                  prefixIcon="github"
+                  label="GitHub"
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
+                <Button
+                  href={contactLinks.linkedIn}
+                  prefixIcon="linkedin"
+                  label="LinkedIn"
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
+                <Button
+                  href={contactLinks.leetCode}
+                  label="LeetCode"
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
+                <Button
+                  href={contactLinks.resume}
+                  prefixIcon="document"
+                  label="Download Resume"
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
+              </Row>
+            </Column>
           </Column>
 
           {about.intro.display && (

@@ -1,0 +1,46 @@
+---
+title: "European Energy Market Data Extractor"
+publishedAt: "2026-04-22"
+summary: "A resilient ingestion pipeline for daily and historical European electricity market data from ENTSO-E APIs into PostgreSQL."
+images:
+  - "/images/projects/project_3.jpg"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/European-Energy-Market-Data-Extractor"
+---
+
+## Overview
+
+This project extracts daily and historical electricity market data from the ENTSO-E ecosystem and stores it for downstream analysis. The focus was not only getting the data in, but making the ingestion reliable enough for repeated bulk backfills, near real-time refreshes, and future analytical work.
+
+## Core Challenge
+
+Market data pipelines need discipline. APIs impose limits, hourly time series must stay aligned, and historical pulls can become expensive if retries or validation are poorly handled. The extractor was designed to keep those moving parts ordered and observable.
+
+- Ingest electricity pricing data from ENTSO-E APIs.
+- Support both incremental refreshes and bulk historical extraction.
+- Persist hourly records in PostgreSQL for analytics and research use cases.
+- Add validation and retry behavior that respects rate limits and partial failures.
+
+## Pipeline Design
+
+The implementation emphasizes repeatability. Each step is narrow in scope, making it easier to rerun failed windows, validate outputs, and extend the extractor to new market dimensions later.
+
+- **API integration layer** handles request construction and response parsing.
+- **Validation checks** guard against malformed, missing, or duplicated records.
+- **Retry logic** keeps ingestion resilient without overwhelming upstream services.
+- **Storage modeling** preserves a clean structure for time-series querying downstream.
+
+## Engineering Highlights
+
+- Balanced historical bulk extraction with near real-time collection needs.
+- Built rate-limit-aware processing to reduce failures during larger pulls.
+- Used PostgreSQL as a dependable landing layer for structured hourly market data.
+- Designed the flow so downstream analytics can build on clean, queryable tables instead of raw responses.
+
+## Outcome
+
+The extractor provides a dependable base for energy-market monitoring, exploratory analysis, and future modeling work. It reflects the kind of data engineering I value most: quiet reliability, clear data contracts, and systems that can be trusted when volumes grow.

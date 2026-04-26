@@ -1,0 +1,46 @@
+---
+title: "Bathroom Materials Scraper and API"
+publishedAt: "2026-04-23"
+summary: "A multi-source product scraping pipeline with a FastAPI backend for searchable bathroom material data."
+images:
+  - "/images/projects/project_2.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/Bathroom-Materials-Scraper"
+---
+
+## Overview
+
+This project gathers scattered bathroom product data from multiple e-commerce sources and turns it into a searchable API. Instead of manually comparing catalogs across inconsistent websites, the system extracts product details, standardizes them, and serves them through a backend designed for filtering, pagination, and fuzzy lookup.
+
+## Why It Matters
+
+Scraping is rarely just about downloading HTML. Every source has its own shape, protection model, and naming noise. The real work is building a pipeline that can adapt when websites disagree on structure, terminology, and reliability.
+
+- Pull product data from multiple vendor websites.
+- Switch between lightweight requests-based scraping and browser automation when needed.
+- Normalize noisy product attributes into a more consistent response model.
+- Expose the data through a developer-friendly API layer.
+
+## Architecture
+
+The system uses source-specific extraction rules but keeps a common output contract. That balance makes it easier to add new suppliers without rewriting the rest of the stack.
+
+- **Scraper adapters** handle per-site parsing strategies and anti-fragile extraction rules.
+- **Config-driven parsing** keeps selectors and source behavior easier to tune over time.
+- **FastAPI services** provide pagination, filtering, and fuzzy search for product discovery.
+- **Test coverage** focuses on parser stability and response correctness as structures shift.
+
+## Engineering Highlights
+
+- Used both `BeautifulSoup` and `Selenium` depending on the complexity and bot resistance of the source.
+- Added configurable parsing logic so small markup changes do not require broad code rewrites.
+- Built the API around practical consumption patterns rather than raw scraped output.
+- Structured the solution for future scaling with multithreading and stronger anti-bot strategies.
+
+## Outcome
+
+The project creates a reusable product-data layer for pricing, vendor comparison, and downstream estimate generation. It pairs well with the pricing engine by making the catalog itself easier to discover, query, and maintain.

@@ -1,0 +1,46 @@
+---
+title: "India News Sentiment Dashboard and Scraper"
+publishedAt: "2026-04-20"
+summary: "A desktop news intelligence tool that scrapes Indian news sources, classifies sentiment with Gemini, and surfaces trends through a local dashboard."
+images:
+  - "/images/projects/project_5.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/India-News-Sentiment-Dashboard-and-Scraper"
+---
+
+## Overview
+
+This project explores the emotional weather of the news cycle. It collects stories from Indian news websites and RSS feeds, runs sentiment analysis on the content, and presents the results in a local desktop dashboard for faster exploration of patterns, tone, and topics.
+
+## Problem Framing
+
+News consumption is noisy. The useful signal is often buried under volume, repetition, and shifting language. This tool was built to create a smaller analytical lens: scrape, classify, store, and visualize stories in one tight workflow.
+
+- Aggregate articles from multiple Indian news sources and RSS feeds.
+- Classify sentiment using the Google Gemini API.
+- Store results locally for trend analysis and repeated exploration.
+- Surface a desktop experience for searching, filtering, and reading sentiment shifts.
+
+## Product Shape
+
+The application keeps the stack intentionally lightweight while still covering the full loop from ingestion to insight.
+
+- **Scraping layer** collects article metadata and text from multiple sources.
+- **AI classification** assigns sentiment and enables keyword-based filtering.
+- **SQLite storage** keeps the system portable and simple to run locally.
+- **Tkinter dashboard** provides an accessible interface without adding web deployment overhead.
+
+## Engineering Highlights
+
+- Combined RSS parsing with direct scraping to widen source coverage.
+- Used Gemini to automate classification while keeping the storage layer simple and auditable.
+- Designed for local execution, which lowers setup friction and makes iteration faster.
+- Treated the dashboard as an analysis tool, not just a viewer, with trend-oriented exploration in mind.
+
+## Outcome
+
+The result is a compact end-to-end data product: ingestion, enrichment, storage, and presentation in one loop. It demonstrates how AI can sharpen a small analytics workflow when paired with straightforward engineering choices and a clear user task.

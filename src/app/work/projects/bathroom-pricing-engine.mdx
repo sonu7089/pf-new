@@ -1,0 +1,46 @@
+---
+title: "Bathroom Pricing Engine"
+publishedAt: "2026-04-24"
+summary: "An AI-assisted pricing engine that translates renovation requests into structured bathroom estimates with material, labor, and VAT logic."
+images:
+  - "/images/projects/project_1.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/Bathroom-Pricing-Engine"
+---
+
+## Overview
+
+This project turns messy renovation intent into something usable: a structured bathroom estimate that feels less like guesswork and more like a spellbook with rules. A user describes the renovation in natural language, the system interprets the scope, and a pricing layer maps that intent into line items for materials, labor, and VAT.
+
+## What It Solves
+
+Traditional quoting workflows break down when requirements arrive as free-form text. The core challenge here was building a bridge between ambiguous human requests and deterministic pricing logic that could still be audited, tuned, and extended later.
+
+- Convert natural language renovation requests into structured JSON.
+- Estimate material and labor costs across 1300+ catalog items.
+- Apply country-aware VAT and regional pricing adjustments.
+- Handle missing or partial inputs without collapsing the quote flow.
+
+## System Design
+
+The engine is split into clear stages so the AI layer stays useful without becoming the source of truth. The language model extracts structured intent, then deterministic pricing modules calculate cost bands and assemble the final estimate.
+
+- **Intent extraction** parses room requirements, finish quality, and implied tasks.
+- **Normalization logic** maps loose wording into known product and labor categories.
+- **Pricing modules** calculate material totals, labor complexity, and tax handling.
+- **Fallback rules** fill gaps when user input is incomplete or region details are unclear.
+
+## Engineering Highlights
+
+- Integrated the OpenRouter API to produce machine-friendly JSON instead of narrative output.
+- Kept the pricing core modular so category rules can evolve independently of the AI prompt layer.
+- Designed the logic to support future vendor comparisons, local model swaps, and richer quote explainability.
+- Treated resilience as a first-class feature by adding safe defaults and recovery paths for sparse input.
+
+## Outcome
+
+The result is a foundation for much faster quote generation without sacrificing control. It demonstrates a pattern I use often: let AI accelerate interpretation, then let well-structured software make the business decision predictable, testable, and extensible.
