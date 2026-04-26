@@ -1,0 +1,120 @@
+---
+title: "How I Fixed a Failing Spark Job and Backfilled Events Data"
+summary: "A story about stabilizing a failing Airflow-orchestrated Spark pipeline, cutting runtime sharply, and safely backfilling high-volume ad-tech data without breaking downstream reporting."
+publishedAt: "2026-04-26"
+tag: "Data Engineering"
+image: "/images/blog/blog_1.png"
+subtitle: "A production incident story about scale, root-cause analysis, backfills, and business trust."
+---
+
+## The Situation
+
+One of our ad-tech pipelines had become the kind of job everyone learns to fear. It was scheduled in Airflow, executed as a Spark workload, and processed large batches of event data needed for analytics and optimization reporting. On normal days, it was slow. On bad days, it failed midway, retried, and left downstream dashboards in an unreliable state.
+
+The job processed high-volume event data that eventually rolled into campaign reporting and internal performance analysis. When it missed a run, the business felt it quickly. Analysts lost confidence in the freshness of the data, stakeholders started asking whether numbers were complete, and operations spent too much time validating what should have been routine.
+
+## What Was Going Wrong
+
+The incident was not caused by one dramatic bug. It was a layered failure pattern:
+
+- Input volume had grown faster than the original job design.
+- The Spark logic performed expensive transformations too early on wide datasets.
+- Partition handling was uneven, which created skew and long-running stages.
+- Retry behavior in Airflow restarted the same inefficient work instead of recovering gracefully.
+- When failures happened, the team had no clean operational path for backfilling missed windows at scale.
+
+The result was a fragile pipeline that looked fine when data was small, but fell apart once daily processing volumes crossed the comfort zone of the original implementation.
+
+## First Step: Stop Guessing
+
+Before changing code, I wanted evidence. I reviewed Airflow logs, Spark stage metrics, data volumes, and failure patterns across multiple runs. A few signals stood out:
+
+- The longest stages were tied to shuffles over unnecessarily wide intermediate dataframes.
+- Skewed keys caused some tasks to run much longer than the rest of the cluster.
+- The job was reading and carrying columns that were not needed until much later.
+- Failed runs left partial operational noise that made backfills riskier than they should have been.
+
+Once the pattern was clear, the plan became straightforward: reduce the amount of data moved, narrow the transformations earlier, make retries less wasteful, and create a clean backfill path.
+
+## The Fix
+
+I reworked the job around a few practical principles:
+
+1. Filter and project early.
+2. Keep transformations modular and easier to inspect.
+3. Reduce wide shuffles wherever possible.
+4. Make recovery and reprocessing part of the design, not an afterthought.
+
+The implementation included:
+
+- Pushing column pruning and filters closer to ingestion.
+- Refactoring heavy transformation steps into smaller PySpark units that were easier to profile and test.
+- Reworking joins and partition logic to reduce skew and stage imbalance.
+- Tightening Airflow task behavior so retries were more predictable and easier to monitor.
+- Adding safer operational controls for rerunning specific time windows during backfills.
+
+## Before and After
+
+| Metric | Before fix | After fix |
+| --- | --- | --- |
+| Average runtime per run | 2 hr 45 min | 58 min |
+| Failure rate during peak windows | 20% to 25% | Below 2% |
+| Data processed per day | ~200GB+ | ~200GB+ with stable completion |
+| Manual intervention for failed runs | Frequent | Rare |
+| Backfill throughput | Slow, high risk | Controlled and repeatable |
+
+The important part here is that the data volume did not shrink. The pipeline got healthier while processing the same scale it already needed to support.
+
+## The Backfill Problem
+
+Fixing the current day’s run was only half the work. We still had a backlog from previous failed or incomplete runs, and that was where the engineering discipline really mattered.
+
+Backfills are dangerous when teams treat them like oversized reruns. In ad-tech systems, backfilling means:
+
+- avoiding duplicate data,
+- preserving partition correctness,
+- not overloading downstream consumers,
+- and keeping current-day SLAs from collapsing while historical data is replayed.
+
+I broke the backfill into controlled windows rather than trying to brute-force everything at once. The strategy was:
+
+- identify the exact affected time partitions,
+- validate source completeness before replay,
+- rerun in batches with observability on throughput and failures,
+- and verify downstream row counts and key metrics after each batch.
+
+## Backfilling 500M+ Events Safely
+
+The backlog covered more than 500 million ad-tech events. Instead of triggering one massive replay, I sequenced the backfill in stages so production did not become unstable again.
+
+| Backfill step | Purpose | Result |
+| --- | --- | --- |
+| Partition audit | Identify missed and partial windows | Eliminated guesswork on replay scope |
+| Batch replay plan | Split historical windows into manageable segments | Reduced operational risk |
+| Validation checks | Compare counts, null trends, and core KPIs | Caught issues before dashboards were affected |
+| Controlled release | Reintroduce corrected data incrementally | Protected downstream reporting stability |
+
+By the end of the process, we had restored the missing data without introducing a second incident through rushed recovery work.
+
+## Why This Mattered to the Business
+
+This job was not failing in isolation. It fed analytics used for campaign performance visibility and optimization discussions. When the pipeline broke, trust in the numbers weakened. That has a real cost:
+
+- analysts spend time validating instead of analyzing,
+- stakeholders hesitate to act on insights,
+- and operational teams lose time on preventable firefighting.
+
+After the fix:
+
+- data freshness became reliable again,
+- dashboard lag reduced materially,
+- incident noise dropped,
+- and the team regained confidence in the daily reporting layer.
+
+The technical win was runtime and reliability. The business win was trust.
+
+## What I Learned
+
+The most useful lesson was not Spark-specific. At scale, fragile systems usually fail because recovery was never designed into them. Performance tuning matters, but observability, rerun strategy, and controlled backfills matter just as much.
+
+In production data engineering, success is not just making the pipeline fast. Success is making it dependable when volumes rise, edge cases appear, and the business still expects the data to be there in the morning.

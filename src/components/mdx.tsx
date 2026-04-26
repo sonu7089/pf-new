@@ -1,6 +1,7 @@
 import { MDXRemote, MDXRemoteProps } from "next-mdx-remote/rsc";
 import React, { ReactNode } from "react";
 import { slugify as transliterate } from "transliteration";
+import remarkGfm from "remark-gfm";
 
 import {
   Heading,
@@ -170,6 +171,69 @@ function createHR() {
   );
 }
 
+function createTable({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ overflowX: "auto", marginTop: "12px", marginBottom: "20px" }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: "0.95rem",
+          lineHeight: 1.6,
+        }}
+      >
+        {children}
+      </table>
+    </div>
+  );
+}
+
+function createTableHead({ children }: { children: ReactNode }) {
+  return <thead>{children}</thead>;
+}
+
+function createTableBody({ children }: { children: ReactNode }) {
+  return <tbody>{children}</tbody>;
+}
+
+function createTableRow({ children }: { children: ReactNode }) {
+  return (
+    <tr style={{ borderBottom: "1px solid var(--neutral-alpha-medium)" }}>
+      {children}
+    </tr>
+  );
+}
+
+function createTableHeader({ children }: { children: ReactNode }) {
+  return (
+    <th
+      style={{
+        textAlign: "left",
+        padding: "12px 14px",
+        fontWeight: 600,
+        color: "var(--neutral-on-background-strong)",
+        background: "var(--neutral-alpha-weak)",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function createTableCell({ children }: { children: ReactNode }) {
+  return (
+    <td
+      style={{
+        padding: "12px 14px",
+        color: "var(--neutral-on-background-medium)",
+        verticalAlign: "top",
+      }}
+    >
+      {children}
+    </td>
+  );
+}
+
 const components = {
   p: createParagraph as any,
   h1: createHeading("h1") as any,
@@ -186,6 +250,12 @@ const components = {
   ul: createList("ul") as any,
   li: createListItem as any,
   hr: createHR as any,
+  table: createTable as any,
+  thead: createTableHead as any,
+  tbody: createTableBody as any,
+  tr: createTableRow as any,
+  th: createTableHeader as any,
+  td: createTableCell as any,
   Heading,
   Text,
   CodeBlock,
@@ -209,5 +279,11 @@ type CustomMDXProps = MDXRemoteProps & {
 };
 
 export function CustomMDX(props: CustomMDXProps) {
-  return <MDXRemote options={{ blockJS: false }} {...props} components={{ ...components, ...(props.components || {}) }} />;
+  return (
+    <MDXRemote
+      options={{ blockJS: false, mdxOptions: { remarkPlugins: [remarkGfm] } }}
+      {...props}
+      components={{ ...components, ...(props.components || {}) }}
+    />
+  );
 }

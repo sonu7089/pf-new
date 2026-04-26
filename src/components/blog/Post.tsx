@@ -17,28 +17,13 @@ export default function Post({ post, thumbnail, direction }: PostProps) {
       key={post.slug}
       href={`/blog/${post.slug}`}
       transition="micro-medium"
-      direction={direction}
-      border="transparent"
-      background="transparent"
-      padding="4"
-      radius="l-4"
-      gap={direction === "column" ? undefined : "24"}
-      s={{ direction: "column" }}
+      border="neutral-alpha-weak"
+      background="surface"
+      padding="0"
+      radius="l"
     >
-      {post.metadata.image && thumbnail && (
-        <Media
-          priority
-          sizes="(max-width: 768px) 100vw, 640px"
-          border="neutral-alpha-weak"
-          cursor="interactive"
-          radius="l"
-          src={post.metadata.image}
-          alt={"Thumbnail of " + post.metadata.title}
-          aspectRatio="16 / 9"
-        />
-      )}
-      <Row fillWidth>
-        <Column maxWidth={28} paddingY="24" paddingX="l" gap="20" vertical="center">
+      <Row fillWidth vertical="stretch" s={{ direction: "column" }}>
+        <Column fillWidth paddingY="24" paddingX="l" gap="20" vertical="center">
           <Row gap="24" vertical="center">
             <Row vertical="center" gap="16">
               <Avatar src={person.avatar} size="s" />
@@ -57,6 +42,20 @@ export default function Post({ post, thumbnail, direction }: PostProps) {
             </Text>
           )}
         </Column>
+        {post.metadata.image && thumbnail && (
+          <Column minWidth={14} style={{ width: "14rem", flexShrink: 0 }}>
+            <Media
+              priority
+              sizes="(max-width: 768px) 100vw, 320px"
+              cursor="interactive"
+              radius="l"
+              src={post.metadata.image}
+              alt={"Thumbnail of " + post.metadata.title}
+              aspectRatio="16 / 9"
+              style={{ width: "100%", height: "100%" }}
+            />
+          </Column>
+        )}
       </Row>
     </Card>
   );

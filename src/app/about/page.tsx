@@ -310,9 +310,9 @@ export default function About() {
               >
                 {about.technical.title}
               </Heading>
-              <Column fillWidth gap="l">
+              <Column fillWidth gap="m" marginBottom="40">
                 {about.technical.skills.map((skill, index) => (
-                  <Column key={`${skill}-${index}`} fillWidth gap="4">
+                  <Column key={`${skill}-${index}`} fillWidth gap="2">
                     <Text id={skill.title} variant="heading-strong-l">
                       {skill.title}
                     </Text>

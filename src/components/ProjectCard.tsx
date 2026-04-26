@@ -1,11 +1,10 @@
 "use client";
 
 import {
-  AvatarGroup,
-  Carousel,
+  Card,
   Column,
-  Flex,
-  Heading,
+  Media,
+  Row,
   SmartLink,
   Text,
 } from "@once-ui-system/core";
@@ -31,60 +30,75 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   link,
 }) => {
   return (
-    <Column fillWidth gap="m">
-      <Carousel
-        sizes="(max-width: 960px) 100vw, 960px"
-        items={images.map((image) => ({
-          slide: image,
-          alt: title,
-        }))}
-      />
-      <Flex
-        s={{ direction: "column" }}
-        fillWidth
-        paddingX="s"
-        paddingTop="12"
-        paddingBottom="24"
-        gap="l"
-      >
-        {title && (
-          <Flex flex={5}>
-            <Heading as="h2" wrap="balance" variant="heading-strong-xl">
-              {title}
-            </Heading>
-          </Flex>
-        )}
-        {(avatars?.length > 0 || description?.trim() || content?.trim()) && (
-          <Column flex={7} gap="16">
-            {avatars?.length > 0 && <AvatarGroup avatars={avatars} size="m" reverse />}
-            {description?.trim() && (
-              <Text wrap="balance" variant="body-default-s" onBackground="neutral-weak">
-                {description}
+    <Card
+      fillWidth
+      border="neutral-alpha-weak"
+      background="surface"
+      padding="0"
+      radius="l"
+    >
+      <Row fillWidth vertical="stretch" s={{ direction: "column" }}>
+        <Column fillWidth paddingY="24" paddingX="l" gap="16" vertical="center">
+          {title && (
+            <SmartLink
+              href={href}
+              style={{ margin: "0", width: "fit-content" }}
+            >
+              <Text variant="heading-strong-l" wrap="balance">
+                {title}
               </Text>
-            )}
-            <Flex gap="24" wrap>
-              {content?.trim() && (
-                <SmartLink
-                  suffixIcon="arrowRight"
-                  style={{ margin: "0", width: "fit-content" }}
-                  href={href}
-                >
-                  <Text variant="body-default-s">Read case study</Text>
-                </SmartLink>
+            </SmartLink>
+          )}
+          {(description?.trim() || content?.trim()) && (
+            <Column gap="12">
+              {description?.trim() && (
+                <Text wrap="balance" variant="body-default-s" onBackground="neutral-weak">
+                  {description}
+                </Text>
               )}
-              {link && (
-                <SmartLink
-                  suffixIcon="arrowUpRightFromSquare"
-                  style={{ margin: "0", width: "fit-content" }}
-                  href={link}
-                >
-                  <Text variant="body-default-s">View project</Text>
-                </SmartLink>
-              )}
-            </Flex>
+              <Row gap="24" wrap>
+                {content?.trim() && (
+                  <SmartLink
+                    suffixIcon="arrowRight"
+                    style={{ margin: "0", width: "fit-content" }}
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Text variant="body-default-s">Read case study</Text>
+                  </SmartLink>
+                )}
+                {link && (
+                  <SmartLink
+                    suffixIcon="arrowUpRightFromSquare"
+                    style={{ margin: "0", width: "fit-content" }}
+                    href={link}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Text variant="body-default-s">View project</Text>
+                  </SmartLink>
+                )}
+              </Row>
+            </Column>
+          )}
+        </Column>
+        {images?.[0] && (
+          <Column minWidth={14} style={{ width: "14rem", flexShrink: 0 }}>
+            <SmartLink
+              href={href}
+              style={{ margin: "0", width: "100%", height: "100%" }}
+            >
+              <Media
+                src={images[0]}
+                alt={title}
+                aspectRatio="16 / 9"
+                radius="l"
+                sizes="(max-width: 768px) 100vw, 320px"
+                style={{ width: "100%", height: "100%" }}
+              />
+            </SmartLink>
           </Column>
         )}
-      </Flex>
-    </Column>
+      </Row>
+    </Card>
   );
 };

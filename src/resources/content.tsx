@@ -149,21 +149,24 @@ const about: About = {
         achievements: [
           <>
             Built and automated end-to-end ETL pipelines processing 500M+ ad-tech events per month
-            from Amazon S3 into MongoDB, powering analytics dashboards used by 50+ stakeholders.
+            from Amazon S3 into MongoDB, creating reliable analytics foundations for dashboards used
+            by 50+ stakeholders across campaign and business reporting workflows.
           </>,
           <>
-            Migrated batch processing workflows from Pandas to PySpark, delivering nearly 5x faster
-            processing on 200GB+ daily datasets while improving stability at scale.
+            Re-architected batch processing workloads from Pandas to PySpark, delivering nearly 5x
+            faster execution on 200GB+ daily datasets while improving resilience and scalability for
+            production volumes.
           </>,
           <>
-            Designed a reusable multi-client ingestion framework for API-based datasets and
-            orchestrated pipelines in Apache Airflow with retries, dependencies, scheduling, and
-            backfills.
+            Designed a reusable multi-client ingestion framework for similar API-based datasets,
+            reducing onboarding effort for new clients and accelerating delivery through shared
+            pipeline patterns, configuration, and orchestration logic.
           </>,
           <>
-            Modeled raw event and ad auction data into analytics-ready datasets and partnered with
-            business teams on reporting and recommendations that contributed to a 12% to 15%
-            increase in client ROI.
+            Orchestrated pipelines in Apache Airflow with retries, dependencies, scheduling, and
+            backfills, then modeled raw event and ad auction data into analytics-ready datasets
+            that supported reporting and recommendations contributing to a 12% to 15% increase in
+            client ROI.
           </>,
         ],
         images: [],
@@ -175,19 +178,23 @@ const about: About = {
         achievements: [
           <>
             Designed and maintained Azure Data Factory and Azure Databricks pipelines to ingest and
-            transform data from 10+ sources, processing 20M+ records weekly and around 1TB per
-            month.
+            transform data from 10+ enterprise sources, processing 20M+ records weekly and roughly
+            1TB per month for downstream reporting and analytics use cases.
           </>,
           <>
-            Built reusable PySpark and SQL components, including standardized transformations and
-            parameterized logic, reducing pipeline development time by 30%.
+            Built reusable PySpark and SQL components with standardized transformations and
+            parameterized logic, reducing pipeline development time by 30% and making delivery more
+            consistent across projects.
           </>,
           <>
             Developed curated SQL models and reporting views for dashboards used by 200+ users,
-            improving query performance by 40%.
+            improving query performance by 40% and making analytics consumption faster and more
+            reliable for business teams.
           </>,
           <>
-            Improved pipeline reliability to 99.9% uptime using automated data quality checks,
+            Tuned SQL Server reporting workloads through query optimization, indexing, and
+            statistics maintenance to reduce report runtimes by 20% to 25%, while improving
+            overall pipeline reliability to 99.9% uptime through automated data quality checks,
             proactive monitoring and alerting, and schema evolution handling.
           </>,
         ],
@@ -416,7 +423,7 @@ const about: About = {
 const blog: Blog = {
   path: "/blog",
   label: "Blog",
-  title: "Writing about design and tech...",
+  title: "Writing about Data Engineering, AI and Tech...",
   description: `Read what ${person.name} has been up to recently`,
   // Create new blog posts by adding a new .mdx file to app/blog/posts
   // All posts will be listed on the /blog route
