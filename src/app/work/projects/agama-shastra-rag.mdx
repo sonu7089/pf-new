@@ -1,0 +1,48 @@
+---
+title: "Agama Shastra RAG"
+publishedAt: "2025-12-27"
+summary: "A citation-aware RAG system for turning complex Agama PDFs into a searchable research assistant."
+images:
+  - "/images/projects/project_7.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/agama-shastra-rag"
+---
+
+## Overview
+
+Agama Shastra RAG is a retrieval-augmented generation system built to make dense Agama and temple studies material easier to search, understand, and question. It converts long-form PDFs into structured JSON, indexes that data in ChromaDB with transformer embeddings, and serves grounded answers through a citation-aware Streamlit chat interface.
+
+## What It Solves
+
+Religious and temple studies texts are usually long, heterogeneous, and difficult to navigate with raw PDF search alone. This project turns those documents into a reusable knowledge base with better structure, retrieval quality, and traceability.
+
+- Convert long-form PDFs into structured JSON for chapters, appendixes, glossary entries, references, and index sections.
+- Build semantic search over enriched content using ChromaDB and `google/embeddinggemma-300m` embeddings.
+- Support richer retrieval with metadata-aware chunking and ultra-rich semantic chunking strategies.
+- Improve answer relevance with multi-query retrieval and optional cross-encoder reranking.
+- Encourage grounded outputs through citation-oriented prompting and source-aware responses.
+
+## System Design
+
+The pipeline is designed as an end-to-end research workflow rather than a thin chat wrapper over documents. Extraction, structuring, indexing, retrieval, and answering are treated as separate stages so each part can be inspected and improved independently.
+
+- **Gemini-based extraction** processes source PDFs into targeted JSON structures instead of flat text dumps.
+- **ChromaDB indexing** stores semantically searchable chunks enriched with structural metadata.
+- **Transformer embeddings** provide the vector layer for retrieval across chapters and supporting sections.
+- **Multi-query retrieval and reranking** improve search quality for nuanced scholarly questions.
+- **Streamlit chat UI** adds conversation-aware query optimization and a practical interface for exploration.
+
+## Engineering Highlights
+
+- Built the full RAG workflow end to end, from PDF enrichment and structured extraction to vector indexing, retrieval, reranking, and chat delivery.
+- Designed prompts and schemas to preserve document structure instead of collapsing heterogeneous content into generic chunks.
+- Added metadata-rich chunking and retrieval inspection utilities to make result quality easier to debug and improve.
+- Kept the system practical for research use by emphasizing grounded answers, source references, and corpus validation.
+
+## Outcome
+
+The result is a domain-specific research assistant that makes specialized Agama and temple studies texts significantly easier to explore than manual PDF reading. It demonstrates more than basic LLM integration by combining document ingestion, structured extraction, vector search, retrieval-quality improvements, and a working interface in one coherent system.
