@@ -1,0 +1,48 @@
+---
+title: "Spiritual Research Agent Pipeline"
+publishedAt: "2026-04-27"
+summary: "A prompt-driven Python workflow that standardizes AI-assisted research, contact validation, and queue-based processing for spiritual organizations and leaders."
+images:
+  - "/images/projects/project_6.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/spiritual-research-system"
+---
+
+## Overview
+
+This project turns a manual and AI-assisted research process into a structured operational pipeline for spiritual leaders and organizations in Maharashtra. Instead of relying on ad hoc spreadsheets and inconsistent outputs, it uses Python CLI tools, canonical CSV schemas, and YAML configuration to manage entity discovery, prioritization, contact validation, and final archival.
+
+## What It Solves
+
+Research workflows break down quickly when multiple stages are handled manually and AI outputs arrive in inconsistent formats. This system adds repeatability, auditability, and clear handoff points between web-capable AI agents and local validation scripts.
+
+- Manage work through `to_be_done`, `in_progress`, and `done` queue states.
+- Apply tiered prioritization to research targets.
+- Standardize and deduplicate entities using configurable normalization rules.
+- Validate contact information with schema checks and public-contact safeguards.
+- Finalize approved records into canonical archival storage.
+- Run reconciliation scripts to catch duplicate, missing, or inconsistent records.
+
+## System Design
+
+The pipeline is built around lightweight local tooling rather than a web UI. That makes it practical for active client use while keeping the workflow transparent and easy to audit.
+
+- **Python CLI scripts** handle queue management, prioritization, validation, and finalization.
+- **CSV-based schemas** provide a canonical structure for staged records and finalized archives.
+- **YAML configuration** controls normalization rules, workflow behavior, and operational settings.
+- **Prompt-driven AI agents** assist with discovery and research, while local scripts enforce quality gates.
+
+## Engineering Highlights
+
+- Designed the repository structure and workflow around deterministic state transitions instead of informal spreadsheet coordination.
+- Used normalization and reconciliation logic to reduce duplicate or inconsistent entity records across stages.
+- Added validation-oriented processing so AI-assisted research could be reviewed before entering canonical storage.
+- Built the tooling for real operational usage, with an emphasis on auditability and safer manual handoffs.
+
+## Outcome
+
+The system is actively used for client work, which is the strongest proof of value here. It reduces coordination overhead by turning a loosely defined research operation into a repeatable pipeline with consistent schemas, validation rules, and audit trails.
