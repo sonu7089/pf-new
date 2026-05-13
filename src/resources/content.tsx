@@ -109,39 +109,7 @@ const about: About = {
     display: true, // set to false to hide this section
     title: "Work Experience",
     experiences: [
-      {
-        company: "Insight Global (Walmart)",
-        timeframe: "September 2025 - Present",
-        role: "Data Engineer · Contract / Remote",
-        achievements: [
-          <>
-            Work with the data normalization team to normalize large-scale IoT telemetry sensor
-            data for the Canada market, transforming vendor and store-specific inputs into
-            standardized datasets used by downstream alarm workflows.
-          </>,
-          <>
-            Built the normalization framework from scratch with rules and configuration separated from code,
-            making config and rule tuning easier and reducing the need for code changes when business logic
-            evolves across vendors, stores, and telemetry scenarios.
-          </>,
-          <>
-            Created a CI/CD workflow so rule updates committed in GitHub automatically propagate to
-            Azure SQL, improving change traceability and making it clear who updated normalization
-            rules and when.
-          </>,
-          <>
-            Set up email alerts, added unit tests to protect existing functionality, and supported
-            reliable delivery across a stack including BigQuery, Azure SQL, PySpark, Dataproc,
-            Airflow, Jenkins, Docker, GitHub, and Looker for internal monitoring.
-          </>,
-          <>
-            Partner closely with the business side to translate operational requirements into
-            normalization rules, requiring deep domain understanding in addition to pipeline and
-            platform engineering.
-          </>,
-        ],
-        images: [],
-      },
+
       {
         company: "Ascendeum",
         timeframe: "June 2025 - Present",
