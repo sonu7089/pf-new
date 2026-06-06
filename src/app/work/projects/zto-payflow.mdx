@@ -1,0 +1,49 @@
+---
+title: "ZTO PayFlow"
+publishedAt: "2026-06-05"
+summary: "A high-throughput, idempotent transaction processing and analytics pipeline built in PySpark to ingest, enrich, and model transactions and evaluate fraud risk."
+images:
+  - "/images/projects/project_8.png"
+team:
+  - name: "Nitish Songara"
+    role: "Data Engineer"
+    avatar: "/images/pfp.jpg"
+    linkedIn: "https://www.linkedin.com/in/nitishsongara1/"
+link: "https://github.com/sonu7089/zto-payflow"
+---
+
+## Overview
+
+ZTO PayFlow is a high-throughput, idempotent transaction processing and analytics pipeline built in PySpark. It ingests raw transaction data from multiple sources, enforces schemas, conducts data quality validations, resolves point-in-time user and merchant dimensions using slowly changing dimensions (SCD Type 2), converts and normalizes currency values, computes 21 risk and behavioral features, aggregates daily business metrics, and exports analytics-ready files for downstream risk modeling and compliance auditing.
+
+## What It Solves
+
+Financial platforms process millions of transaction events that must be cleaned, enriched, and checked for risk markers without losing transactions or introducing database inaccuracies. ZTO PayFlow addresses this at scale by introducing linear, isolated ETL stages with built-in data quality safeguards and point-in-time consistency.
+
+- **Ingestion & Schema Enforcement:** Explicitly applies schemas to raw transaction records, isolating malformed logs to a quarantine bucket instead of silently dropping them or failing the execution.
+- **Strict Financial Precision:** Prevents IEEE 754 precision errors by storing currency amounts in `DecimalType(18, 2)` and exchange rates in `DecimalType(10, 6)` instead of floating points.
+- **SCD Type 2 Point-in-Time Joins:** Accurately matches transactions with dimensions using validity boundaries (`valid_from <= txn_timestamp < valid_to`).
+- **Feature Engineering at Scale:** Calculates 21 features spanning rolling user transaction frequency/volumes (1h to 30d), device flags, and merchant dynamics.
+- **Daily Rollups & Auditing:** Computes user-daily and merchant-daily metrics (including success rates and chargeback ratios) and outputs structured AML datasets.
+
+## System Design
+
+The pipeline is organized as six consecutive stages to maintain linear dependency and separation of concerns:
+
+- **Stage 1 (Ingestion):** Reads raw JSON logs, verifies schemas, isolates invalid records to S3 Quarantine, and writes clean records to S3 Staged as Parquet.
+- **Stage 2 (Dimension Resolution):** Manages user and merchant SCD2 logs and converts transaction amounts to USD at daily exchange rate boundaries.
+- **Stage 3 (Enrichment):** Joins transactions with resolved user, merchant, and device dimension tables.
+- **Stage 4 (Feature Engineering):** Calculates rolling velocity windows, behavioral ratios, and device profile risk scores.
+- **Stage 5 (Daily Aggregations):** Groups and computes user/merchant aggregates using PySpark cube operations.
+- **Stage 6 (Output & Export):** Builds target tables for compliance auditing (AML checks, structured alert triggers, and data quality metrics).
+
+## Engineering Highlights
+
+- **Idempotent Executions:** Designed every stage to overwrite output partitions on retry, ensuring safety during pipeline reruns or backfills.
+- **Config-Driven Operations:** Managed high-risk countries, AML thresholds, feature configurations, and environment parameters using external YAML files passed via job arguments.
+- **Data Quality Safeguards:** Included a custom Data Quality Engine that monitors records, outputs summary logs to Glue, and writes bad data to a tagged quarantine path.
+- **Advanced PySpark Optimizations:** Optimized performance using broadcast hash joins for small tables, bucketing on `user_id` to eliminate shuffle overhead, and Adaptive Query Execution (AQE).
+
+## Outcome
+
+ZTO PayFlow scales effectively to handle enterprise workloads up to 50 million transactions per day (roughly 50 GB of raw input data daily). By shifting processing from ad-hoc scripts to an engineered, idempotent pipeline, it guarantees transaction integrity, meets regulatory compliance standards, and provides clean datasets for downstream BI and ML fraud models.
