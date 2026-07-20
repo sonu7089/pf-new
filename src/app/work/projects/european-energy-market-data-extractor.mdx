@@ -1,7 +1,7 @@
 ---
 title: "European Energy Market Data Extractor"
 publishedAt: "2026-04-22"
-summary: "A resilient ingestion pipeline for daily and historical European electricity market data from ENTSO-E APIs into PostgreSQL."
+summary: "A pipeline that pulls daily and historical European electricity market data from ENTSO-E APIs into PostgreSQL. Handles rate limits, retries, and bulk backfills without breaking."
 images:
   - "/images/projects/project_3.jpg"
 team:
@@ -43,4 +43,4 @@ The implementation emphasizes repeatability. Each step is narrow in scope, makin
 
 ## Outcome
 
-The extractor provides a dependable base for energy-market monitoring, exploratory analysis, and future modeling work. It reflects the kind of data engineering I value most: quiet reliability, clear data contracts, and systems that can be trusted when volumes grow.
+The extractor gives a dependable base for energy-market monitoring, analysis, and future modeling work. The same pattern works for any external data source your business depends on: market feeds, competitor prices, public records, or partner APIs.

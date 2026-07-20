@@ -1,12 +1,10 @@
 "use client";
 
-import { mailchimp, newsletter } from "@/resources";
+import { mailchimp, newsletter, person, calendlyLink, whatsappLink } from "@/resources";
 import { Button, Heading, Text, Background, Column, Row } from "@once-ui-system/core";
 import { opacity, SpacingToken } from "@once-ui-system/core";
 
 export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...flex }) => {
-  const phoneNumber = "+91 98277 32220";
-
   if (newsletter.display === false) return null;
 
   return (
@@ -72,22 +70,32 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
           {newsletter.description}
         </Text>
       </Column>
-      <Row fillWidth maxWidth={24} s={{ direction: "column" }} gap="8" horizontal="center">
+      <Row fillWidth maxWidth={32} s={{ direction: "column" }} gap="8" horizontal="center">
         <Button
-          href="mailto:nitishsongara75@gmail.com"
-          prefixIcon="email"
+          href={calendlyLink}
+          prefixIcon="calendar"
           size="m"
           fillWidth
         >
-          Email Me!
+          Book a free 20 min call
         </Button>
         <Button
-          href={`tel:${phoneNumber.replace(/\s+/g, "")}`}
+          href={whatsappLink}
+          prefixIcon="whatsapp"
           size="m"
           variant="secondary"
           fillWidth
         >
-          Call Me!
+          WhatsApp
+        </Button>
+        <Button
+          href={`mailto:${person.email}`}
+          prefixIcon="email"
+          size="m"
+          variant="secondary"
+          fillWidth
+        >
+          Email
         </Button>
       </Row>
     </Column>

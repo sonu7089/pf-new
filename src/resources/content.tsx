@@ -5,17 +5,25 @@ const person: Person = {
   firstName: "Nitish",
   lastName: "Songara",
   name: `Nitish Songara`,
-  role: "Data Engineer",
+  role: "Data & AI Engineer",
   avatar: "/images/pfp.jpg",
   email: "nitishsongara75@gmail.com",
   location: "Asia/Kolkata", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
   languages: ["English", "Hindi"], // optional: Leave the array empty if you don't want to display languages
 };
 
+const calendlyLink = "https://calendly.com/nitishsongara75/new-meeting";
+const whatsappLink = "https://wa.me/919827732220";
+
 const newsletter: Newsletter = {
   display: true,
-  title: <>Let's Connect!</>,
-  description: <></>,
+  title: <>Have a data or AI problem? Let's talk.</>,
+  description: (
+    <>
+      Tell me what is slow, manual, or messy in your business. I will reply within 24 hours
+      with a clear next step. The first call is free and there is no sales pressure.
+    </>
+  ),
 };
 
 const social: Social = [
@@ -32,6 +40,12 @@ const social: Social = [
     name: "LinkedIn",
     icon: "linkedin",
     link: "https://www.linkedin.com/in/nitishsongara1/",
+    essential: true,
+  },
+  {
+    name: "WhatsApp",
+    icon: "whatsapp",
+    link: whatsappLink,
     essential: true,
   },
   {
@@ -52,24 +66,28 @@ const home: Home = {
   path: "/",
   image: "/images/og/home.jpg",
   label: "Home",
-  title: `${person.name}'s Portfolio`,
-  description: `Portfolio website showcasing my work as a ${person.role}`,
-  headline: <>Building Reliable Pipelines and Analytics Systems</>,
+  title: `Nitish Songara | Data & AI Engineer`,
+  description:
+    "I help businesses in the US, Europe, and India build data pipelines, dashboards, automation, and AI tools. Clear scope, fixed price, fast delivery.",
+  headline: <>Data pipelines, dashboards, and AI tools that save your team hours every week</>,
   featured: {
     display: true,
     title: (
       <Row gap="12" vertical="center">
-        <strong className="ml-4">Nitish Songara</strong>{" "}
+        <strong className="ml-4">Open for freelance projects</strong>{" "}
         <Line background="brand-alpha-strong" vert height="20" />
         <Text marginRight="4" onBackground="brand-medium">
-          Data Engineer
+          US · EU · India
         </Text>
       </Row>
     ),
+    href: calendlyLink,
   },
   subline: (
     <>
-      I'm Nitish, a data engineer and I design and optimize data workflows that turn raw, messy data into scalable, business-ready insights.
+      I am Nitish. I spent 5+ years building data systems for Deloitte clients and ad tech
+      platforms. Now I help businesses clean up their data, automate manual reports, and put
+      AI to work. You get clear scope, a fixed price, and fast delivery.
     </>
   ),
 };
@@ -77,8 +95,8 @@ const home: Home = {
 const about: About = {
   path: "/about",
   label: "About",
-  title: `About – ${person.name}`,
-  description: `Meet ${person.name}, ${person.role} from ${person.location}`,
+  title: `About | ${person.name}`,
+  description: `Meet ${person.name}, a data and AI engineer working with clients in the US, Europe, and India`,
   tableOfContent: {
     display: true,
     subItems: false,
@@ -88,7 +106,7 @@ const about: About = {
   },
   calendar: {
     display: true,
-    link: "https://calendly.com/nitishsongara75/new-meeting",
+    link: calendlyLink,
   },
   intro: {
     display: true,
@@ -96,11 +114,22 @@ const about: About = {
     description: (
       <>
         <p>
-          Data Engineer with 5+ years of experience building scalable ETL/ELT pipelines, analytics-ready datasets, and cloud-based data solutions across ad-tech and enterprise environments. I specialize in solving complex data problems and designing practical, scalable solutions using Python, SQL, PySpark, Databricks, Airflow, and cloud platforms. My work includes ingesting data from files, databases, and APIs, transforming it into reliable data models, and enabling reporting, optimization, and business decision-making.
-
+          I am a data and AI engineer with 5+ years of experience. I worked at Deloitte for
+          almost four years, then moved to high-scale ad tech, where my pipelines process
+          500M+ events every month. I hold three Microsoft Azure certifications.
         </p>
         <p>
-          I also use AI to accelerate solution design, troubleshoot pipelines, improve SQL and Python productivity, and speed up testing and documentation. Combined with strong engineering judgment, data quality checks, monitoring, and performance optimization, this allows me to deliver maintainable, production-ready data systems with measurable business impact.
+          Today I also work directly with businesses in the US, Europe, and India. I build
+          data pipelines, automate manual reports, create dashboards, and add practical AI
+          tools like document chatbots and smart workflows. On the side, I train and evaluate
+          large language models for AI labs through Turing, Revelo, and Toloka. That work
+          shows me every day what AI can and cannot do, so I only recommend AI where it
+          actually helps.
+        </p>
+        <p>
+          The best way to start is a free 20 minute call. Tell me what is slow or manual in
+          your business. I will tell you honestly if I can fix it, what it costs, and how long
+          it takes.
         </p>
       </>
     ),
@@ -109,32 +138,49 @@ const about: About = {
     display: true, // set to false to hide this section
     title: "Work Experience",
     experiences: [
-
+      {
+        company: "Insight Global (Client: Walmart)",
+        timeframe: "September 2025 - Present",
+        role: "Data Engineer (Contract)",
+        achievements: [
+          <>
+            Normalize IoT sensor data from Walmart Canada stores. Vendor-specific and
+            store-specific inputs become one standard dataset that downstream alarm systems
+            rely on.
+          </>,
+          <>
+            Built the normalization framework from scratch, with business rules kept in
+            configuration instead of code. When the rules change, no code change is needed.
+          </>,
+          <>
+            Set up CI/CD so rule updates committed in GitHub deploy automatically to Azure
+            SQL, backed by unit tests, email alerts, and monitoring. Stack: Python, BigQuery,
+            Azure SQL, PySpark, Dataproc, Airflow, Jenkins, Docker.
+          </>,
+        ],
+        images: [],
+      },
       {
         company: "Ascendeum",
         timeframe: "June 2025 - Present",
         role: "Associate Data Engineer",
         achievements: [
           <>
-            Built and automated end-to-end ETL pipelines processing 500M+ ad-tech events per month
-            from Amazon S3 into MongoDB, creating reliable analytics foundations for dashboards used
-            by 50+ stakeholders across campaign and business reporting workflows.
+            Built and automated ETL pipelines that process 500M+ ad tech events per month
+            from Amazon S3 into MongoDB. They power analytics dashboards used by 50+
+            stakeholders.
           </>,
           <>
-            Re-architected batch processing workloads from Pandas to PySpark, delivering nearly 5x
-            faster execution on 200GB+ daily datasets while improving resilience and scalability for
-            production volumes.
+            Moved batch processing from Pandas to PySpark. Jobs now run about 5x faster on
+            200GB+ daily data and handle production volumes with far fewer failures.
           </>,
           <>
-            Designed a reusable multi-client ingestion framework for similar API-based datasets,
-            reducing onboarding effort for new clients and accelerating delivery through shared
-            pipeline patterns, configuration, and orchestration logic.
+            Designed one reusable ingestion framework for many client APIs, so new clients
+            onboard faster using shared pipeline patterns and configuration.
           </>,
           <>
-            Orchestrated pipelines in Apache Airflow with retries, dependencies, scheduling, and
-            backfills, then modeled raw event and ad auction data into analytics-ready datasets
-            that supported reporting and recommendations contributing to a 12% to 15% increase in
-            client ROI.
+            Run everything on Apache Airflow with retries, dependencies, and backfills. The
+            modeled data supports campaign decisions that raised client ROI by 12% to 15%.
           </>,
         ],
         images: [],
@@ -145,28 +191,86 @@ const about: About = {
         role: "Data Engineer",
         achievements: [
           <>
-            Designed and maintained Azure Data Factory and Azure Databricks pipelines to ingest and
-            transform data from 10+ enterprise sources, processing 20M+ records weekly and roughly
-            1TB per month for downstream reporting and analytics use cases.
+            Designed and maintained Azure Data Factory and Azure Databricks pipelines that
+            ingest 10+ sources and process 20M+ records weekly, about 1TB per month.
           </>,
           <>
-            Built reusable PySpark and SQL components with standardized transformations and
-            parameterized logic, reducing pipeline development time by 30% and making delivery more
-            consistent across projects.
+            Built reusable PySpark and SQL components with parameterized logic, cutting
+            pipeline development time by 30% across projects.
           </>,
           <>
-            Developed curated SQL models and reporting views for dashboards used by 200+ users,
-            improving query performance by 40% and making analytics consumption faster and more
-            reliable for business teams.
+            Created SQL models and reporting views for dashboards used by 200+ people, making
+            queries 40% faster.
           </>,
           <>
-            Tuned SQL Server reporting workloads through query optimization, indexing, and
-            statistics maintenance to reduce report runtimes by 20% to 25%, while improving
-            overall pipeline reliability to 99.9% uptime through automated data quality checks,
-            proactive monitoring and alerting, and schema evolution handling.
+            Kept pipelines at 99.9% uptime with automated data quality checks, monitoring,
+            alerts, and schema change handling. Tuned SQL Server workloads to cut report
+            runtimes by 20% to 25%.
           </>,
         ],
         images: [],
+      },
+    ],
+  },
+  aiTraining: {
+    display: true,
+    title: "AI Training Experience",
+    description: (
+      <>
+        I train and evaluate large language models for AI labs and training platforms. This
+        work keeps me close to how modern AI really behaves, which helps me build AI tools
+        for clients that hold up in the real world.
+      </>
+    ),
+    experiences: [
+      {
+        company: "Mindrift (Toloka AI)",
+        timeframe: "April 2026 - May 2026",
+        role: "STEM Computer Science Expert & QA Expert",
+        achievements: [
+          <>
+            Designed research-level computer science challenges across algorithms, data
+            structures, distributed systems, and databases to test the limits of LLM
+            reasoning.
+          </>,
+          <>
+            Reviewed model-generated solutions line by line, wrote reference solutions with
+            Python verification scripts, and audited tasks from other experts before
+            submission.
+          </>,
+        ],
+      },
+      {
+        company: "Revelo",
+        timeframe: "December 2025 - April 2026",
+        role: "Agentic Coding Trainer, Python",
+        achievements: [
+          <>
+            Evaluated competing AI coding agents on complex GitHub repository tasks, reviewing
+            their pull requests for correctness, architecture fit, maintainability, and
+            regression risk.
+          </>,
+          <>
+            Reproduced agent environments with Docker to verify real behavior, and delivered
+            structured ratings across correctness, security, and performance.
+          </>,
+        ],
+      },
+      {
+        company: "Turing",
+        timeframe: "Dec 2024 - Apr 2025 · Jul 2025 - Aug 2025",
+        role: "RLHF Trainer, Java & Python",
+        achievements: [
+          <>
+            Evaluated and ranked model-generated Java and Python code for correctness, edge
+            cases, and production quality, creating training signal for frontier models.
+          </>,
+          <>
+            Designed and scored multi-step agentic tasks, evaluated complete agent runs end to
+            end, and wrote corrective interventions that steered agents back to the intended
+            outcome.
+          </>,
+        ],
       },
     ],
   },
@@ -176,12 +280,7 @@ const about: About = {
     skills: [
       {
         title: "Languages & Processing",
-        description: (
-          <>
-            Core languages and data-processing tools I use to write transformation logic, build
-            pipelines, and work through large datasets efficiently.
-          </>
-        ),
+        description: <>The languages and processing tools I use every day.</>,
         tags: [
           { name: "Python" },
           { name: "SQL" },
@@ -197,8 +296,7 @@ const about: About = {
         title: "Data Engineering",
         description: (
           <>
-            End-to-end pipeline work focused on reliable ingestion, transformation, validation, and
-            performance tuning for analytics-ready data products.
+            Moving data reliably from source systems to reports people can trust.
           </>
         ),
         tags: [
@@ -211,6 +309,7 @@ const about: About = {
           { name: "Data Validation" },
           { name: "Performance Optimization" },
           { name: "Query Optimization" },
+          { name: "Web Scraping" },
         ],
         images: [],
       },
@@ -218,8 +317,7 @@ const about: About = {
         title: "Platforms & Tools",
         description: (
           <>
-            Cloud and data platforms I have used to build, orchestrate, store, and deliver
-            production workloads across multiple environments.
+            Cloud and data platforms I have shipped production work on.
           </>
         ),
         tags: [
@@ -227,12 +325,15 @@ const about: About = {
           { name: "Apache Airflow" },
           { name: "MongoDB" },
           { name: "SQL Server" },
+          { name: "PostgreSQL" },
           { name: "BigQuery" },
           { name: "Snowflake" },
           { name: "AWS" },
           { name: "Azure" },
           { name: "GCP" },
+          { name: "Dataproc" },
           { name: "Docker" },
+          { name: "Jenkins" },
           { name: "Git" },
         ],
         images: [],
@@ -241,8 +342,7 @@ const about: About = {
         title: "Analytics & Reporting",
         description: (
           <>
-            Reporting and analytics skills used to turn curated datasets into dashboards, KPIs,
-            and decision-support views for business stakeholders.
+            Turning clean data into dashboards and KPIs people actually use.
           </>
         ),
         tags: [
@@ -255,23 +355,42 @@ const about: About = {
         images: [],
       },
       {
-        title: "AI-Assisted Development",
+        title: "AI Engineering & Training",
         description: (
           <>
-            AI-enabled workflows that speed up prototyping, debugging, documentation, test
-            generation, and solution design without losing engineering judgment.
+            I build AI features for real business use, and I train the models behind them for
+            AI labs.
           </>
         ),
         tags: [
-          { name: "AI tools in workflow" },
+          { name: "RAG Systems" },
+          { name: "Document Chatbots" },
+          { name: "LLM APIs (Claude, GPT, Gemini)" },
+          { name: "RLHF" },
+          { name: "LLM Code Evaluation" },
+          { name: "Agentic Task Design" },
+          { name: "Trajectory Evaluation" },
+          { name: "Prompt Design" },
+          { name: "ChromaDB" },
+          { name: "OpenRouter" },
+        ],
+        images: [],
+      },
+      {
+        title: "AI-Assisted Development",
+        description: (
+          <>
+            AI tools I use to design, build, test, and document faster without losing
+            engineering judgment.
+          </>
+        ),
+        tags: [
           { name: "Claude Code" },
           { name: "Codex" },
           { name: "Antigravity" },
           { name: "OpenCode" },
           { name: "Kilo" },
-          { name: "AI skills" },
           { name: "Prompt-driven prototyping" },
-          { name: "SQL and Python acceleration" },
           { name: "Debugging support" },
           { name: "Documentation and tests" },
           { name: "LLM API integration" },
@@ -282,13 +401,12 @@ const about: About = {
         title: "Core Strengths",
         description: (
           <>
-            The working habits and collaboration skills that support delivery, reliability, and
-            maintainability across projects.
+            How I work with clients and teams.
           </>
         ),
         tags: [
           { name: "Problem Solving" },
-          { name: "Stakeholder Communication" },
+          { name: "Clear Communication" },
           { name: "Requirement Gathering" },
           { name: "Ownership" },
           { name: "Fast Learning" },
@@ -391,7 +509,7 @@ const about: About = {
 const blog: Blog = {
   path: "/blog",
   label: "Blog",
-  title: "Writing about Data Engineering, AI and Tech...",
+  title: "Notes on data engineering and AI",
   description: `Read what ${person.name} has been up to recently`,
   // Create new blog posts by adding a new .mdx file to app/blog/posts
   // All posts will be listed on the /blog route
@@ -400,10 +518,10 @@ const blog: Blog = {
 const work: Work = {
   path: "/work",
   label: "Work",
-  title: `Projects – ${person.name}`,
-  description: `Design and dev projects by ${person.name}`,
+  title: `Projects | ${person.name}`,
+  description: `Real projects by ${person.name}: data pipelines, scrapers, dashboards, and AI tools.`,
   // Create new project pages by adding a new .mdx file to app/blog/posts
   // All projects will be listed on the /home and /work routes
 };
 
-export { person, social, newsletter, home, about, blog, work };
+export { person, social, newsletter, home, about, blog, work, calendlyLink, whatsappLink };

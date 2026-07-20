@@ -15,7 +15,7 @@ import {
   Media,
   SmartLink,
 } from "@once-ui-system/core";
-import { home, about, person, baseURL, routes } from "@/resources";
+import { home, about, person, baseURL, routes, calendlyLink, whatsappLink } from "@/resources";
 import { Mailchimp } from "@/components";
 import { Posts } from "@/components/blog/Posts";
 import { getPosts } from "@/utils/utils";
@@ -30,19 +30,59 @@ export async function generateMetadata() {
   });
 }
 
-export default function Home() {
-  const featuredProjects = getPosts(["src", "app", "work", "projects"]).filter((post) =>
-    [
-      "end-to-end-marketing-data-pipelines-on-azure",
-      "european-energy-market-data-extractor",
-    ].includes(post.slug),
-  );
+const services = [
+  {
+    title: "Dashboards & Reporting",
+    description:
+      "See sales, spend, and operations in one live dashboard that updates itself. Power BI or web. No more manual Excel reports.",
+  },
+  {
+    title: "Data Pipelines & ETL",
+    description:
+      "Reliable pipelines that move data from your tools into one clean place. Built on Azure, AWS, or GCP. Tested, monitored, and documented.",
+  },
+  {
+    title: "Automation",
+    description:
+      "Reports that build themselves. Reconciliation that runs at night. I turn tasks that take days into jobs that take minutes.",
+  },
+  {
+    title: "AI for Your Business",
+    description:
+      "Chatbots that answer from your documents. AI that reads invoices, drafts reports, and sorts leads. We start with a small, safe pilot.",
+  },
+];
 
-  const orderedFeaturedProjects = [
+const steps = [
+  {
+    step: "1",
+    title: "Free 20 minute call",
+    description: "You tell me what is slow, manual, or messy. I tell you honestly if I can fix it.",
+  },
+  {
+    step: "2",
+    title: "Fixed-scope pilot",
+    description: "A small first project with a clear price and timeline, usually 1 to 3 weeks.",
+  },
+  {
+    step: "3",
+    title: "Scale when it works",
+    description: "Happy with the pilot? We extend it, or I support you on an ongoing basis.",
+  },
+];
+
+export default function Home() {
+  const featuredSlugs = [
     "end-to-end-marketing-data-pipelines-on-azure",
+    "agama-shastra-rag",
+    "zto-payflow",
     "european-energy-market-data-extractor",
-  ]
-    .map((slug) => featuredProjects.find((project) => project.slug === slug))
+  ];
+
+  const allProjects = getPosts(["src", "app", "work", "projects"]);
+
+  const orderedFeaturedProjects = featuredSlugs
+    .map((slug) => allProjects.find((project) => project.slug === slug))
     .filter(Boolean);
 
   return (
@@ -94,111 +134,128 @@ export default function Home() {
             </Text>
           </RevealFx>
           <RevealFx paddingTop="12" delay={0.4} horizontal="center" paddingLeft="12">
-            <Button
-              id="about"
-              data-border="rounded"
-              href={about.path}
-              variant="secondary"
-              size="m"
-              weight="default"
-              arrowIcon
-            >
-              <Row gap="8" vertical="center" paddingRight="4">
-                {about.avatar.display && (
-                  <Avatar
-                    marginRight="8"
-                    style={{ marginLeft: "-0.75rem" }}
-                    src={person.avatar}
-                    size="m"
-                  />
-                )}
-                {about.title}
-              </Row>
-            </Button>
+            <Row gap="12" s={{ direction: "column" }} horizontal="center">
+              <Button
+                id="book-call"
+                data-border="rounded"
+                href={calendlyLink}
+                variant="primary"
+                size="m"
+                weight="default"
+                prefixIcon="calendar"
+                arrowIcon
+              >
+                Book a free intro call
+              </Button>
+              <Button
+                id="about"
+                data-border="rounded"
+                href={about.path}
+                variant="secondary"
+                size="m"
+                weight="default"
+                arrowIcon
+              >
+                <Row gap="8" vertical="center" paddingRight="4">
+                  {about.avatar.display && (
+                    <Avatar
+                      marginRight="8"
+                      style={{ marginLeft: "-0.75rem" }}
+                      src={person.avatar}
+                      size="m"
+                    />
+                  )}
+                  About me
+                </Row>
+              </Button>
+            </Row>
           </RevealFx>
         </Column>
       </Column>
       <Column fillWidth gap="24" marginBottom="l">
-        <Row fillWidth gap="24" marginTop="40" s={{ direction: "column" }}>
-          <Grid columns="3" s={{ columns: 1 }} fillWidth gap="20" paddingX="20">
-            <Card
-              fillWidth
-              padding="l"
-              radius="l"
-              background="surface"
-              border="neutral-alpha-weak"
-              style={{ minHeight: "12rem" }}
-            >
-              <Column gap="8">
-                <Text variant="heading-strong-s" onBackground="brand-weak">
-                  Pipeline Engineering
-                </Text>
-                <Text variant="body-default-m" onBackground="neutral-weak">
-                  Build scalable ETL/ELT workflows across cloud data stacks.
-                </Text>
-              </Column>
-            </Card>
-            <Card
-              fillWidth
-              padding="l"
-              radius="l"
-              background="surface"
-              border="neutral-alpha-weak"
-              style={{ minHeight: "12rem" }}
-            >
-              <Column gap="8">
-                <Text variant="heading-strong-s" onBackground="brand-weak">
-                  AI-Enabled Engineering
-                </Text>
-                <Text variant="body-default-m" onBackground="neutral-weak">
-                  Use AI to accelerate design, debugging, documentation, and practical delivery
-                  without losing engineering rigor.
-                </Text>
-              </Column>
-            </Card>
-            <Card
-              fillWidth
-              padding="l"
-              radius="l"
-              background="surface"
-              border="neutral-alpha-weak"
-              style={{ minHeight: "12rem" }}
-            >
-              <Column gap="8">
-                <Text variant="heading-strong-s" onBackground="brand-weak">
-                  Analytics Enablement
-                </Text>
-                <Text variant="body-default-m" onBackground="neutral-weak">
-                  Turn raw sources into models, dashboards, and decision-ready data teams can
-                  trust and act on.
-                </Text>
-              </Column>
-            </Card>
+        <Column fillWidth paddingX="20" gap="8">
+          <Heading as="h2" variant="display-strong-xs" wrap="balance">
+            What I can do for you
+          </Heading>
+          <Text variant="body-default-l" onBackground="neutral-weak" wrap="balance">
+            I work with founders, operations teams, and agencies in the US, Europe, and India.
+          </Text>
+        </Column>
+        <Row fillWidth gap="24" marginTop="16" s={{ direction: "column" }}>
+          <Grid columns="2" s={{ columns: 1 }} fillWidth gap="20" paddingX="20">
+            {services.map((service) => (
+              <Card
+                key={service.title}
+                fillWidth
+                padding="l"
+                radius="l"
+                background="surface"
+                border="neutral-alpha-weak"
+                style={{ minHeight: "9rem" }}
+              >
+                <Column gap="8">
+                  <Text variant="heading-strong-s" onBackground="brand-weak">
+                    {service.title}
+                  </Text>
+                  <Text variant="body-default-m" onBackground="neutral-weak">
+                    {service.description}
+                  </Text>
+                </Column>
+              </Card>
+            ))}
           </Grid>
         </Row>
-      </Column>
-      {routes["/blog"] && (
-        <Column fillWidth gap="24" marginBottom="l">
-          <Row fillWidth paddingRight="64">
-            <Line maxWidth={48} />
-          </Row>
-          <Row fillWidth gap="24" marginTop="40" s={{ direction: "column" }}>
-            <Row flex={1} paddingLeft="l" paddingTop="24">
-              <Heading as="h2" variant="display-strong-xs" wrap="balance">
-                Latest from the blog
-              </Heading>
-            </Row>
-            <Row flex={3} paddingX="20">
-              <Posts range={[1, 1]} columns="1" thumbnail direction="row" />
-            </Row>
-          </Row>
-          <Row fillWidth paddingLeft="64" horizontal="end">
-            <Line maxWidth={48} />
+        <Row fillWidth gap="20" paddingX="20" marginTop="16" s={{ direction: "column" }}>
+          {steps.map((item) => (
+            <Column key={item.step} flex={1} gap="4">
+              <Text variant="heading-strong-s" onBackground="brand-weak">
+                {item.step}. {item.title}
+              </Text>
+              <Text variant="body-default-s" onBackground="neutral-weak">
+                {item.description}
+              </Text>
+            </Column>
+          ))}
+        </Row>
+        <Column paddingX="20" gap="16">
+          <Text variant="body-default-m" onBackground="neutral-weak" wrap="balance">
+            Fixed-scope pilots start at $500 for US and EU clients, or ₹20,000 in India. The
+            first call is free. If I cannot help you, I will say so on the call.
+          </Text>
+          <Row gap="12" s={{ direction: "column" }}>
+            <Button
+              href={calendlyLink}
+              variant="primary"
+              size="m"
+              weight="default"
+              prefixIcon="calendar"
+              data-border="rounded"
+            >
+              Book the free call
+            </Button>
+            <Button
+              href={whatsappLink}
+              variant="secondary"
+              size="m"
+              weight="default"
+              prefixIcon="whatsapp"
+              data-border="rounded"
+            >
+              Message me on WhatsApp
+            </Button>
           </Row>
         </Column>
-      )}
+      </Column>
       <Column fillWidth gap="24" marginBottom="l">
-        <Row fillWidth gap="24" marginTop="40" s={{ direction: "column" }}>
+        <Column fillWidth paddingX="20" gap="8">
+          <Heading as="h2" variant="display-strong-xs" wrap="balance">
+            Selected work
+          </Heading>
+          <Text variant="body-default-l" onBackground="neutral-weak" wrap="balance">
+            Real systems I have built. Enterprise pipelines, AI tools, and data products.
+          </Text>
+        </Column>
+        <Row fillWidth gap="24" marginTop="16" s={{ direction: "column" }}>
           <Grid columns="2" s={{ columns: 1 }} fillWidth gap="16" paddingX="20">
             {orderedFeaturedProjects.map(
               (project) =>
@@ -249,7 +306,32 @@ export default function Home() {
             )}
           </Grid>
         </Row>
+        <Row paddingX="20">
+          <SmartLink href="/work" suffixIcon="arrowRight">
+            <Text variant="body-default-m">View all projects</Text>
+          </SmartLink>
+        </Row>
       </Column>
+      {routes["/blog"] && (
+        <Column fillWidth gap="24" marginBottom="l">
+          <Row fillWidth paddingRight="64">
+            <Line maxWidth={48} />
+          </Row>
+          <Row fillWidth gap="24" marginTop="40" s={{ direction: "column" }}>
+            <Row flex={1} paddingLeft="l" paddingTop="24">
+              <Heading as="h2" variant="display-strong-xs" wrap="balance">
+                Latest from the blog
+              </Heading>
+            </Row>
+            <Row flex={3} paddingX="20">
+              <Posts range={[1, 1]} columns="1" thumbnail direction="row" />
+            </Row>
+          </Row>
+          <Row fillWidth paddingLeft="64" horizontal="end">
+            <Line maxWidth={48} />
+          </Row>
+        </Column>
+      )}
       <Mailchimp />
     </Column>
   );

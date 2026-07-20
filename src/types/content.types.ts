@@ -165,6 +165,26 @@ export interface About extends BasePageConfig {
       }>;
     }>;
   };
+  /** AI training experience section */
+  aiTraining?: {
+    /** Whether to display AI training experience */
+    display: boolean;
+    /** Title for the AI training experience section */
+    title: string;
+    /** Short description shown under the section title */
+    description?: React.ReactNode;
+    /** List of AI training experiences */
+    experiences: Array<{
+      /** Company name */
+      company: string;
+      /** Timeframe of engagement */
+      timeframe: string;
+      /** Role or job title */
+      role: string;
+      /** Achievements at the company */
+      achievements: React.ReactNode[];
+    }>;
+  };
   /** Education section */
   education?: {
     /** Whether to display the education section */

@@ -48,6 +48,15 @@ export default function About() {
       display: about.work.display,
       items: about.work.experiences.map((experience) => experience.company),
     },
+    ...(about.aiTraining
+      ? [
+          {
+            title: about.aiTraining.title,
+            display: about.aiTraining.display,
+            items: about.aiTraining.experiences.map((experience) => experience.company),
+          },
+        ]
+      : []),
     {
       title: about.technical.title,
       display: about.technical.display,
@@ -192,6 +201,14 @@ export default function About() {
                   variant="secondary"
                 />
                 <Button
+                  href="https://wa.me/919827732220"
+                  prefixIcon="whatsapp"
+                  label="WhatsApp"
+                  size="s"
+                  weight="default"
+                  variant="secondary"
+                />
+                <Button
                   href={`tel:${phoneNumber.replace(/\s+/g, "")}`}
                   label={phoneNumber}
                   size="s"
@@ -294,6 +311,61 @@ export default function About() {
                         ))}
                       </Row>
                     )}
+                  </Column>
+                ))}
+              </Column>
+            </>
+          )}
+
+          {about.aiTraining?.display && (
+            <>
+              <Heading
+                as="h2"
+                id={about.aiTraining.title}
+                variant="display-strong-s"
+                marginBottom="m"
+              >
+                {about.aiTraining.title}
+              </Heading>
+              {about.aiTraining.description && (
+                <Text
+                  variant="body-default-m"
+                  onBackground="neutral-weak"
+                  marginBottom="l"
+                >
+                  {about.aiTraining.description}
+                </Text>
+              )}
+              <Column fillWidth gap="l" marginBottom="40">
+                {about.aiTraining.experiences.map((experience, index) => (
+                  <Column
+                    key={`${experience.company}-${experience.role}-${index}`}
+                    fillWidth
+                  >
+                    <Row fillWidth horizontal="between" vertical="end" marginBottom="4">
+                      <Text id={experience.company} variant="heading-strong-l">
+                        {experience.company}
+                      </Text>
+                      <Text variant="heading-default-xs" onBackground="neutral-weak">
+                        {experience.timeframe}
+                      </Text>
+                    </Row>
+                    <Text variant="body-default-s" onBackground="brand-weak" marginBottom="m">
+                      {experience.role}
+                    </Text>
+                    <Column as="ul" gap="16">
+                      {experience.achievements.map(
+                        (achievement: React.ReactNode, achievementIndex: number) => (
+                          <Text
+                            as="li"
+                            variant="body-default-m"
+                            key={`${experience.company}-${achievementIndex}`}
+                          >
+                            {achievement}
+                          </Text>
+                        ),
+                      )}
+                    </Column>
                   </Column>
                 ))}
               </Column>

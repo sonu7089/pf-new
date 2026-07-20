@@ -31,9 +31,7 @@ const display: DisplayConfig = {
 
 // Enable password protection on selected routes
 // Set password in the .env file, refer to .env.example
-const protectedRoutes: ProtectedRoutesConfig = {
-  "/work/automate-design-handovers-with-a-figma-to-code-pipeline": true,
-};
+const protectedRoutes: ProtectedRoutesConfig = {};
 
 // Import and set font for each variant
 import { Geist } from "next/font/google";
@@ -186,17 +184,16 @@ const mailchimp: MailchimpConfig = {
 // default schema data
 const schema: SchemaConfig = {
   logo: "",
-  type: "Organization",
-  name: "Once UI",
+  type: "Person",
+  name: "Nitish Songara",
   description: home.description,
-  email: "lorant@once-ui.com",
+  email: "nitishsongara75@gmail.com",
 };
 
 // social links
 const sameAs: SameAsConfig = {
-  threads: "https://www.threads.com/@once_ui",
-  linkedin: "https://www.linkedin.com/company/once-ui/",
-  discord: "https://discord.com/invite/5EyAQ4eNdS",
+  linkedin: "https://www.linkedin.com/in/nitishsongara1/",
+  github: "https://github.com/sonu7089",
 };
 
 // social sharing configuration for blog posts
@@ -207,7 +204,7 @@ const socialSharing: SocialSharingConfig = {
     linkedin: true,
     facebook: false,
     pinterest: false,
-    whatsapp: false,
+    whatsapp: true,
     reddit: false,
     telegram: false,
     email: true,

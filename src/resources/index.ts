@@ -7,6 +7,8 @@ export {
   about,
   blog,
   work,
+  calendlyLink,
+  whatsappLink,
 } from "./content";
 
 export {
