@@ -115,8 +115,9 @@ const about: About = {
       <>
         <p>
           I am a data and AI engineer with 5+ years of experience. I worked at Deloitte for
-          almost four years, then moved to high-scale ad tech, where my pipelines process
-          500M+ events every month. I hold three Microsoft Azure certifications.
+          almost four years, then in high-scale ad tech, where I built pipelines that process
+          500M+ events every month. Today I work on Walmart data systems through Insight
+          Global, and I hold three Microsoft Azure certifications.
         </p>
         <p>
           Today I also work directly with businesses in the US, Europe, and India. I build
@@ -162,7 +163,7 @@ const about: About = {
       },
       {
         company: "Ascendeum",
-        timeframe: "June 2025 - Present",
+        timeframe: "June 2025 - July 2026",
         role: "Associate Data Engineer",
         achievements: [
           <>

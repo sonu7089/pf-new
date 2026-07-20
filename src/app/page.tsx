@@ -219,7 +219,7 @@ export default function Home() {
         </Row>
         <Column paddingX="20" gap="16">
           <Text variant="body-default-m" onBackground="neutral-weak" wrap="balance">
-            Fixed-scope pilots start at $500 for US and EU clients, or ₹20,000 in India. The
+            Fixed-scope pilots start at $100 for US and EU clients, or ₹10,000 in India. The
             first call is free. If I cannot help you, I will say so on the call.
           </Text>
           <Row gap="12" s={{ direction: "column" }}>
