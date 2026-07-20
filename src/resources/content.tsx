@@ -69,7 +69,12 @@ const home: Home = {
   title: `Nitish Songara | Data & AI Engineer`,
   description:
     "I help businesses in the US, Europe, and India build data pipelines, dashboards, automation, and AI tools. Clear scope, fixed price, fast delivery.",
-  headline: <>Data pipelines, dashboards, and AI tools that save your team hours every week</>,
+  headline: (
+    <>
+      Data pipelines, dashboards, and AI tools that{" "}
+      <span className="text-gradient">save your team hours every week</span>
+    </>
+  ),
   featured: {
     display: true,
     title: (

@@ -67,3 +67,15 @@
   --scheme-neutral-600-50: rgba(137,152,159,0.5);
   /*
 }*/
+
+.text-gradient {
+  color: var(--brand-on-background-strong, #53c1de);
+  background-image: linear-gradient(
+    120deg,
+    var(--brand-on-background-strong, #53c1de),
+    var(--brand-on-background-weak, #9adcf0)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

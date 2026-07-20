@@ -14,6 +14,7 @@ import {
   Card,
   Media,
   SmartLink,
+  Tag,
 } from "@once-ui-system/core";
 import { home, about, person, baseURL, routes, calendlyLink, whatsappLink } from "@/resources";
 import { Mailchimp } from "@/components";
@@ -170,6 +171,14 @@ export default function Home() {
               </Button>
             </Row>
           </RevealFx>
+          <RevealFx paddingTop="24" delay={0.6} horizontal="center">
+            <Row gap="8" wrap horizontal="center">
+              <Tag size="l">5+ years in data</Tag>
+              <Tag size="l">3x Microsoft Azure certified</Tag>
+              <Tag size="l">Deloitte and Walmart projects</Tag>
+              <Tag size="l">US · EU · India</Tag>
+            </Row>
+          </RevealFx>
         </Column>
       </Column>
       <Column fillWidth gap="24" marginBottom="l">
@@ -205,46 +214,87 @@ export default function Home() {
             ))}
           </Grid>
         </Row>
-        <Row fillWidth gap="20" paddingX="20" marginTop="16" s={{ direction: "column" }}>
+        <Grid columns="3" s={{ columns: 1 }} fillWidth gap="20" paddingX="20" marginTop="16">
           {steps.map((item) => (
-            <Column key={item.step} flex={1} gap="4">
-              <Text variant="heading-strong-s" onBackground="brand-weak">
-                {item.step}. {item.title}
-              </Text>
-              <Text variant="body-default-s" onBackground="neutral-weak">
-                {item.description}
-              </Text>
-            </Column>
+            <Card
+              key={item.step}
+              fillWidth
+              padding="l"
+              radius="l"
+              background="surface"
+              border="neutral-alpha-weak"
+            >
+              <Column gap="12">
+                <Row gap="12" vertical="center">
+                  <Row
+                    radius="full"
+                    background="brand-alpha-weak"
+                    border="brand-alpha-medium"
+                    horizontal="center"
+                    vertical="center"
+                    style={{ width: "2rem", height: "2rem", flexShrink: 0 }}
+                  >
+                    <Text variant="label-strong-m" onBackground="brand-medium">
+                      {item.step}
+                    </Text>
+                  </Row>
+                  <Text variant="heading-strong-s">{item.title}</Text>
+                </Row>
+                <Text variant="body-default-m" onBackground="neutral-weak">
+                  {item.description}
+                </Text>
+              </Column>
+            </Card>
           ))}
+        </Grid>
+        <Row fillWidth paddingX="20" marginTop="8">
+          <Card
+            fillWidth
+            padding="l"
+            radius="l"
+            background="brand-alpha-weak"
+            border="brand-alpha-medium"
+          >
+            <Row
+              fillWidth
+              gap="24"
+              vertical="center"
+              horizontal="between"
+              s={{ direction: "column", horizontal: "start" }}
+            >
+              <Column gap="4">
+                <Text variant="heading-strong-m">
+                  Pilots start at $100 for US and EU clients, or ₹10,000 in India
+                </Text>
+                <Text variant="body-default-m" onBackground="neutral-weak">
+                  The first call is free. If I cannot help you, I will say so on the call.
+                </Text>
+              </Column>
+              <Row gap="12" s={{ direction: "column" }}>
+                <Button
+                  href={calendlyLink}
+                  variant="primary"
+                  size="m"
+                  weight="default"
+                  prefixIcon="calendar"
+                  data-border="rounded"
+                >
+                  Book the free call
+                </Button>
+                <Button
+                  href={whatsappLink}
+                  variant="secondary"
+                  size="m"
+                  weight="default"
+                  prefixIcon="whatsapp"
+                  data-border="rounded"
+                >
+                  Message me on WhatsApp
+                </Button>
+              </Row>
+            </Row>
+          </Card>
         </Row>
-        <Column paddingX="20" gap="16">
-          <Text variant="body-default-m" onBackground="neutral-weak" wrap="balance">
-            Fixed-scope pilots start at $100 for US and EU clients, or ₹10,000 in India. The
-            first call is free. If I cannot help you, I will say so on the call.
-          </Text>
-          <Row gap="12" s={{ direction: "column" }}>
-            <Button
-              href={calendlyLink}
-              variant="primary"
-              size="m"
-              weight="default"
-              prefixIcon="calendar"
-              data-border="rounded"
-            >
-              Book the free call
-            </Button>
-            <Button
-              href={whatsappLink}
-              variant="secondary"
-              size="m"
-              weight="default"
-              prefixIcon="whatsapp"
-              data-border="rounded"
-            >
-              Message me on WhatsApp
-            </Button>
-          </Row>
-        </Column>
       </Column>
       <Column fillWidth gap="24" marginBottom="l">
         <Column fillWidth paddingX="20" gap="8">
