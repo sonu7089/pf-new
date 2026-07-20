@@ -1,0 +1,254 @@
+---
+title: "Designing a Cost-Aware LLM Router Without Hurting Quality"
+summary: "A practical system design for sending each AI request to the right model while protecting quality, latency, reliability, and budget."
+publishedAt: "2025-08-31"
+tag: "AI Engineering"
+subtitle: "The best model for every request is usually a routing policy, not one model name."
+---
+
+AI applications often begin with one model and one API call. That is a sensible way to prove that an idea works. It becomes expensive and slow when every request, from a simple classification to a difficult investigation, goes through the same large model.
+
+The obvious response is to add a cheaper model. The difficult part is deciding when to use it. A weak router saves money by sending hard work to a model that cannot complete it. An overcautious router sends everything to the strongest model and saves nothing. A production router has to balance cost, speed, quality, risk, and current system health on every request.
+
+This article designs that router as a real service. The goal is not to chase the lowest token price. The goal is to spend computing power where it changes the result.
+
+## Start With the Business Constraint
+
+Suppose an operations platform handles five types of AI work:
+
+- classifying incoming tickets,
+- extracting fields from forms,
+- answering questions from approved documents,
+- drafting customer replies,
+- and investigating unusual account activity.
+
+These tasks do not need the same level of reasoning. They also do not carry the same risk. A wrong ticket label can be corrected by the next workflow step. A wrong account decision can affect a customer.
+
+Before choosing models, define a service contract for each task class.
+
+| Task class | Quality need | Latency need | Risk | Normal path |
+| --- | --- | --- | --- | --- |
+| Classification | Stable labels | Very fast | Low | Small model |
+| Field extraction | Exact schema | Fast | Medium | Small model with validation |
+| Knowledge answer | Grounded answer | Interactive | Medium | Mid-size model with retrieval |
+| Customer draft | Clear and safe text | Interactive | Medium | Mid-size model with policy checks |
+| Investigation | Deep reasoning | Can wait longer | High | Strong model with review |
+
+This table is more important than a model benchmark. It turns vague routing into an engineering decision that can be tested.
+
+## The Router Architecture
+
+A useful design separates request understanding, policy, execution, and verification.
+
+```text
+Client
+  |
+  v
+API Gateway
+  |
+  v
+Request Profiler -----> Tenant Policy and Budget Store
+  |                                  |
+  v                                  v
+Routing Policy <---------- Live Model Health
+  |
+  +------> Fast Model Pool
+  |
+  +------> Balanced Model Pool
+  |
+  +------> Deep Reasoning Pool
+  |
+  +------> Async Batch Queue
+  |
+  v
+Output Validator and Risk Checks
+  |
+  +------> Accept and Return
+  |
+  +------> Retry or Escalate
+  |
+  +------> Human Review Queue
+
+All stages -----> Traces, Cost Metrics, and Eval Store
+```
+
+The router should not be hidden inside a long prompt. It should be an explicit service or module with versioned rules, measurable decisions, and a clear fallback path.
+
+## Step 1: Build a Request Profile
+
+The profiler converts a raw request into routing features. Use facts that are cheap to compute and easy to explain.
+
+Useful features include:
+
+- task type,
+- input size,
+- requested output schema,
+- number and kind of tools available,
+- whether private data is present,
+- risk level,
+- latency target,
+- tenant budget,
+- and whether the result needs human approval.
+
+Some features come from the API endpoint. An extraction endpoint already knows that it needs structured output. Others may come from a small classifier. Keep this classifier narrow. If the profiling step becomes another open-ended agent, routing cost and failure risk both rise.
+
+Do not let user text set trusted fields directly. A user can ask for a task to be marked low risk, but the policy layer must make that decision from server-side rules.
+
+## Step 2: Apply Hard Gates Before Scores
+
+Many routing designs calculate one complexity score and choose a model from it. That is useful, but it should not be the first control.
+
+Start with hard gates:
+
+1. Does the task contain regulated or highly sensitive data?
+2. Does it request a write action or financial decision?
+3. Does it need a tool that only some execution environments support?
+4. Is a particular data region required?
+5. Is the request too large for a model context limit?
+6. Is the preferred model currently unhealthy?
+
+These gates remove unsafe or impossible choices. A weighted score can then choose among the remaining options.
+
+A simple score might consider reasoning depth, input length, tool count, ambiguity, and risk. Keep the weights in configuration and record the input features with every routing decision. Teams must be able to answer, "Why did this request use the expensive path?"
+
+## Step 3: Use a Routing Ladder
+
+A routing ladder starts with the cheapest path that is expected to pass the task contract. It escalates only when there is evidence of failure.
+
+For structured extraction, the path might be:
+
+1. Call a small model with a strict output schema.
+2. Validate types, required fields, and business rules.
+3. If validation fails, retry once with a short error description.
+4. If it fails again, call a stronger model.
+5. If confidence is still low, send the item to human review.
+
+This works because validation is deterministic. The system does not ask the first model whether its own answer is good.
+
+For open-ended answers, use different evidence. Check citations, retrieval coverage, policy violations, and task-specific graders. Avoid a loop in which one model keeps rewriting its output without a clear stop condition.
+
+## Quality Gates Must Match the Task
+
+One universal confidence number is rarely useful. Confidence should come from signals that relate to the job.
+
+| Task | Strong quality signal | Weak quality signal |
+| --- | --- | --- |
+| Extraction | Schema and business-rule validation | Model says it is confident |
+| Retrieval answer | Claims supported by retrieved text | Fluent wording |
+| Classification | Agreement with labeled examples | Long explanation |
+| Tool workflow | Correct tool, arguments, and final state | Number of tool calls |
+| Summary | Required facts preserved | Short output |
+
+The validator should return structured reasons such as `missing_required_field`, `unsupported_claim`, or `unsafe_action`. These reasons drive retries, escalation, dashboards, and future eval cases.
+
+## Control Cost in More Than One Place
+
+Model choice is only one cost lever. A good router manages the whole request.
+
+### Keep Repeated Prefixes Stable
+
+Many providers can reuse a repeated prompt prefix. Put stable instructions, tool definitions, and long shared examples first. Put user-specific content later. Track cached input tokens separately from uncached tokens so a prompt change does not create a silent cost jump.
+
+### Separate Online and Offline Work
+
+Interactive users need quick responses. Nightly classification, embedding generation, bulk enrichment, and evaluation runs usually do not. Send delay-tolerant work to an asynchronous batch path. The online service should not compete with bulk jobs for the same concurrency budget.
+
+### Limit Context Before It Reaches the Model
+
+Do not send every document, tool, or conversation turn by default. Retrieve a focused context, summarize older state when safe, and expose only tools that are relevant to the current step. Smaller context often improves both cost and attention.
+
+### Put a Ceiling on Agent Loops
+
+Define maximum turns, tool calls, retry counts, and total token budget. When the ceiling is reached, return a clear partial result or request help. An agent that keeps trying is not necessarily making progress.
+
+## Design Fallbacks for Real Failures
+
+Models and providers can time out, reject requests, reach rate limits, or change latency under load. Routing must use live health, not only static price and quality data.
+
+| Failure | Safe response |
+| --- | --- |
+| Rate limit | Queue, use controlled backoff, or move to an approved equivalent |
+| Timeout before any result | Retry with a bounded policy and the same application correlation ID; do not assume model inference is deduplicated |
+| Timeout after a tool write | Check the tool operation status before retrying |
+| Invalid structured output | Repair once, then escalate |
+| Preferred model unavailable | Use a tested fallback policy |
+| Budget exhausted | Defer optional work or require explicit approval |
+
+Fallback models must be tested before an incident. A model with a similar price or context size may behave differently with tools, schemas, or safety instructions. Run the same eval suite against every allowed route.
+
+## Protect Idempotency Across Escalation
+
+Routing becomes dangerous when a model can perform actions. Imagine a payment-support workflow that creates a refund, then loses its connection before receiving the tool result. A stronger model retries the whole plan and creates a second refund.
+
+Every side-effecting tool call needs:
+
+- an operation ID created by the application,
+- an idempotency key accepted by the tool or enforced by an adapter,
+- a durable record of requested, started, and completed states,
+- and a status lookup that runs before any retry.
+
+The model route may change, but the business operation ID must not.
+
+## Evaluate the Policy, Not Only the Models
+
+A router can fail even when every model works as expected. It may classify too many tasks as easy, escalate too often, or choose a slow route during traffic peaks.
+
+Build an evaluation set with real task classes and expected outcomes. For each policy version, measure:
+
+- task success rate,
+- escalation rate,
+- human-review rate,
+- latency percentiles,
+- cost per successful task,
+- unsafe-action rate,
+- and fallback success rate.
+
+"Cost per successful task" is the key measure. Cost per call rewards a cheap model that produces unusable work.
+
+Run the policy in shadow mode before changing production. The new router can make decisions without executing them. Compare those choices with the current route, then canary the policy for a small share of traffic.
+
+## Observability and Audit Design
+
+Record one trace for the full request. Add spans for profiling, route selection, each model call, retrieval, tools, validation, retries, and human review.
+
+The routing event should contain:
+
+- policy version,
+- provider and pinned model version,
+- prompt version and tool-schema version,
+- request class,
+- allowed model pool,
+- chosen route,
+- reason codes,
+- estimated budget,
+- actual usage,
+- validation result,
+- and any escalation path.
+
+Do not log private prompt content by default. Store safe identifiers and redacted attributes. Give sensitive payloads a shorter retention period and stricter access policy than operational metrics.
+
+## Implementation Checklist
+
+1. List the task classes and define a quality, latency, and risk contract for each.
+2. Build a labeled evaluation set from real examples and known edge cases.
+3. Benchmark approved models on each class.
+4. Add deterministic validators for schemas, citations, policy, and tool arguments.
+5. Implement hard gates, then a small and explainable routing score.
+6. Add idempotency and operation status checks before enabling write tools.
+7. Separate interactive traffic from batch work.
+8. Trace every routing decision and calculate cost per successful task.
+9. Test fallback routes with failure injection.
+10. Release policy changes through shadow mode and a canary.
+
+## Final Thought
+
+A model router is a control plane for AI work. It decides how much reasoning to buy, where data may go, which tools are available, and when the system should stop and ask for help.
+
+The best design is not the one that always chooses the cheapest model. It is the one that makes the cheapest safe choice, proves the result met its contract, and escalates with full context when it did not.
+
+## Further Reading
+
+- [OpenAI prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching)
+- [OpenAI latency optimization guide](https://developers.openai.com/api/docs/guides/latency-optimization)
+- [OpenAI Batch API guide](https://developers.openai.com/api/docs/guides/batch)
+- [OpenAI Structured Outputs overview](https://openai.com/index/introducing-structured-outputs-in-the-api/)

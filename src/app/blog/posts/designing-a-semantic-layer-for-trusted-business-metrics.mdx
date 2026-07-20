@@ -1,0 +1,198 @@
+---
+title: "Designing a Semantic Layer for Trusted Business Metrics"
+summary: "A practical architecture for defining business metrics once, planning safe queries, enforcing access, and serving the same trusted answers to dashboards and AI agents."
+publishedAt: "2025-07-13"
+tag: "Data Architecture"
+subtitle: "Put a governed metric service between warehouse tables and every analytical consumer."
+---
+
+Two dashboards can show different revenue numbers while both queries are technically correct. One may use order date, another payment date, and a third may include refunds only after settlement. An AI agent can make this worse by writing a fresh SQL interpretation for every question.
+
+A semantic layer turns business meaning into a versioned, executable model. Consumers ask for a metric, dimensions, filters, and a time grain. The layer chooses safe joins, applies policy, generates SQL, and returns freshness and lineage information.
+
+It is both a query service and a control plane. Its job is to make the same question mean the same thing everywhere.
+
+## Start With a Real Production Problem
+
+Assume a commerce company needs `net_revenue` in dashboards, finance notebooks, customer portals, and an AI assistant. Its warehouse contains orders, items, payments, refunds, customers, and exchange rates.
+
+The metric owner must settle questions such as:
+
+- Is revenue recognized when an order is created, paid, shipped, or settled?
+- Are taxes, discounts, failed payments, and refunds included?
+- Which exchange rate converts a transaction, and at what time?
+- Can the result be grouped by the customer's current region or region at purchase time?
+- Which roles may see customer-level values?
+
+These belong in the metric contract. Hiding them in dashboard SQL creates private definitions.
+
+## Reference Architecture
+
+```text
+ Dashboards        Notebooks         AI agent tools
+     |                 |                   |
+     +-----------------+-------------------+
+                       |
+               Semantic query API
+              typed request + identity
+                       |
+             +---------+----------+
+             | Authentication and |
+             | policy evaluation  |
+             +---------+----------+
+                       |
+             Versioned model catalog
+          metrics, entities, dimensions,
+          time rules, joins, ownership
+                       |
+                 Query planner
+          validate -> join -> aggregate
+             -> optimize -> render SQL
+                       |
+             +---------+----------+
+             |                    |
+       Result cache          Rollup tables
+             |                    |
+             +---------+----------+
+                       |
+                Data warehouse
+                       |
+       Lineage, query logs, tests, alerts
+```
+
+The catalog is the control plane. The planner and cache serve data. This separation keeps metric review independent from any dashboard vendor.
+
+## Model Meaning Before Writing SQL
+
+Begin each model with its grain. An order-item model may have one row per `order_item_id`; a payment model may have several attempts per order. Unclear grain lets joins multiply totals.
+
+Next, define entities so the planner knows keys and relationships. `order` may be primary in the order model and foreign in the payment model. Declare each cardinality. Reject a many-to-many path or route it through an explicit bridge with tested allocation logic.
+
+Safe edges alone do not guarantee a safe query. Joining orders to both payments and refunds can multiply rows even when each relationship is valid on its own. The planner must first aggregate each fact to a shared order grain, or reject the query. Every relationship also needs a requiredness rule and declared behavior for missing dimensions. This prevents a filter from silently turning an intended left join into an inner join.
+
+Dimensions describe grouping and filtering. Time dimensions must specify source timestamp, time zone, week start, fiscal calendar, and valid grains. For a changing customer region, choose the current value or the value at event time.
+
+Measures describe aggregation, while metrics add business meaning. A complete metric definition should include:
+
+- stable machine name, description, owner, and approval status,
+- source measures, expression, filters, and null rules,
+- unit, currency behavior, and display format,
+- default event-time dimension and allowed grains,
+- valid dimensions and entity paths,
+- additivity limits, freshness expectation, and sensitivity class,
+- and a version or immutable manifest digest.
+
+Additivity matters. Daily distinct active customers cannot be summed into monthly active customers. The planner must recompute at the requested grain or reject the rollup.
+
+## Plan Queries From a Typed Request
+
+A consumer sends metric `net_revenue`, dimension `customer_region`, grain `week`, and a bounded date range, not arbitrary SQL.
+
+The planner then follows a visible sequence:
+
+1. Authenticate the caller and capture trusted tenant and role attributes.
+2. Resolve a specific semantic manifest version.
+3. Validate metric, dimensions, filters, grain, and requested range.
+4. Apply object and row policies before looking in any cache.
+5. Find an unambiguous join path through the entity graph.
+6. Align event time, calendar, currency, and as-of rules.
+7. Choose a valid rollup or generate parameterized warehouse SQL.
+8. Return values with metric version, filters, grain, and freshness.
+
+The plan should expose selected models, join cardinalities, pushed filters, rollup choice, and estimated scan size. Reject a request when no safe path can be proven. A plausible wrong total is worse than a clear error.
+
+Time rules need the same precision. Use half-open request ranges such as `[start, end)`. Convert an event into the reporting time zone before calendar truncation, and take `as_of` from a trusted request context. Historical dimensions and exchange rates need explicit `[valid_from, valid_to)` intervals. A cumulative or period-offset metric must widen its source scan to collect the required history, then apply the requested output range. Cropping the input first gives a clean but wrong result.
+
+## Cache Meaning, Not Just SQL Text
+
+Dashboards refresh together, and agents ask related questions. Caching protects warehouse capacity, but a careless cache can leak data or return an old definition.
+
+A cache key includes the normalized request, manifest digest, environment, time zone, calendar, currency, source versions, and a fingerprint of the effective authorization decision. That fingerprint covers policy version, subject scope, row predicates, masks, and allowed projection. Evaluate policy before lookup. Share results only when every part of that scope is identical. If the system cannot prove this, use a per-subject cache.
+
+Use short result caching for interactive queries and rollups for common, expensive grains. A rollup must match the requested dimensions, filters, aggregation behavior, and freshness. Distinct counts and late corrections need special care.
+
+Build each rollup in a versioned partition, validate it, then publish an atomic pointer. Key refreshes by model version, immutable source snapshot or version vector, and partition so retries replace the same logical build. A maximum event-time watermark is not enough because a refund can correct an old partition without moving that maximum. Publish one rollup generation across every affected partition so a query cannot mix old and new generations.
+
+## Make Security Part of Compilation
+
+Carry caller identity from the gateway through policy evaluation. Support metric visibility, dimension masking, row filters, tenant isolation, and detail limits. Use least-privilege, read-only warehouse credentials.
+
+Never accept tenant, role, or policy overrides from filters or an agent prompt. Use verified identity context, parameterize user values, and omit sensitive values from logs.
+
+For AI, expose two tools: discover approved metrics and run a semantic query. Give them strict schemas, bounded dates, row limits, and an identity-based allowlist. The agent can explain results but cannot recreate formulas or bypass the layer with warehouse SQL.
+
+## Versioning, Lineage, and Migration
+
+Store definitions in Git and produce an immutable release manifest. A label change can be compatible. A changed formula, default filter, time meaning, relationship, or currency rule is usually breaking even when the column name stays the same.
+
+For a breaking change, create `net_revenue_v2` and run both versions. Use lineage and query logs to find consumers of the old metric. Compare fixed fixtures and representative history, document expected differences, migrate consumers, and announce removal.
+
+Record the compatible physical schema, policy, source, and rollup versions in each release. Keep old columns and tables through an expand-contract window. Before promotion, compile and execute a smoke query with the previous manifest against the retained physical state. A pointer to an old definition is not a rollback if its columns or policies no longer work.
+
+Lineage should connect values to expressions, measures, physical columns, transformation jobs, and consumers. Record the manifest digest and plan so an incident can reconstruct the definition used.
+
+## CI Tests That Protect Meaning
+
+Pull requests should parse models, enforce unique names, resolve references, validate entity keys, and compile representative queries. Test join cardinality against data, not only metadata.
+
+Fixtures should cover refunds, nulls, duplicates, currencies, late facts, daylight-saving boundaries, and fiscal periods. A policy matrix proves which roles can request each object. Test cache isolation between tenants and versions. Explain plans catch unexpectedly large joins.
+
+Classify semantic diffs in the release pipeline. Breaking changes require an owner, migration plan, consumer list, and approval.
+
+## Decisions and Failure Modes
+
+| Situation | Design choice | Reason |
+| --- | --- | --- |
+| One metric has valid business variants | Publish clearly named metrics, not a hidden flag | Consumers can select the contract |
+| A join is ambiguous | Require an explicit relationship | Guessing creates silent fanout |
+| A common query is slow | Add a tested rollup at a safe grain | Central meaning stays intact |
+| An agent needs analytics | Provide discovery and typed query tools | It gets no raw SQL access |
+
+| Failure mode | Consequence | Recovery or control |
+| --- | --- | --- |
+| Bad model release | Consumers receive a wrong number | Switch to a tested prior manifest whose physical dependencies remain compatible |
+| Warehouse timeout | Retries create excess load | Reuse a request ID, deduplicate cache fills, and bound retries |
+| Rollup refresh stops | Results become stale | Expose age, fall back when allowed, and alert |
+| Late refund changes history | Cached history is wrong | Rebuild affected partitions from source versions and publish one coherent rollup generation |
+| Policy service fails | Data could cross tenants | Fail closed for new decisions and never bypass policy |
+| Entity key is not unique | Joins inflate measures | Block release and quarantine the model |
+
+## Recovery and Operations
+
+Keep the last good manifest locally, but use it only with valid compiled policies and compatible physical sources. A policy outage cannot become an access bypass. Roll back by switching an immutable pointer, not editing files, then run a known query to verify that the old plan still executes.
+
+Reads are repeatable, but retries consume capacity. Carry one request ID through every stage. Use single-flight cache fills so identical misses trigger one query. Give exports an idempotency key and publish only after row, freshness, and schema checks pass.
+
+Monitor request success, planning errors, latency, scan volume, cache hits, rollup age, policy denials, manifest adoption, and deprecated use. Trace request, version, plan, and warehouse job without storing result rows. Give each metric an owner and incident path.
+
+## Implementation Checklist
+
+- [ ] Choose one business metric with visible disagreement across consumers.
+- [ ] Document its grain, event time, formula, exclusions, unit, and owner.
+- [ ] Define entities, cardinalities, dimensions, and safe join paths.
+- [ ] Create a typed semantic query API and reject arbitrary SQL.
+- [ ] Apply identity-based policy before planning and cache lookup.
+- [ ] Include model and policy fingerprints in cache keys.
+- [ ] Make rollup builds versioned, atomic, and idempotent.
+- [ ] Add fixture, join, time, policy, and cache-isolation tests in CI.
+- [ ] Produce an immutable manifest and semantic diff for every release.
+- [ ] Record lineage from warehouse columns to metrics and consumers.
+- [ ] Give dashboards and agents the same governed metric interface.
+- [ ] Define rollback, stale-data, timeout, and policy-outage behavior.
+- [ ] Measure freshness, adoption, cost, latency, and deprecated use.
+
+## Conclusion
+
+A trusted semantic layer is a small compiler with a large responsibility. It converts business definitions into safe queries while preserving access, time meaning, performance, and history. Metric code, entity relationships, policy, caching, tests, and lineage form one system.
+
+Dashboards gain consistent numbers. Agents gain a bounded query path. Operators gain a version and plan they can inspect. Trust comes from that complete path, not a friendly metric name.
+
+## Further Reading
+
+- [MetricFlow 0.207.0 README and query-planning overview](https://github.com/dbt-labs/metricflow/blob/v0.207.0/README.md)
+- [MetricFlow 0.207.0 changelog, released January 16, 2025](https://github.com/dbt-labs/metricflow/blob/v0.207.0/CHANGELOG.md)
+- [dbt Labs: The new Semantic Layer specification](https://www.getdbt.com/blog/new-dbt-semantic-layer-spec-dna)
+- [dbt Labs: Exports for the dbt Semantic Layer](https://www.getdbt.com/blog/announcing-exports-for-the-dbt-semantic-layer)
+- [Cube v1.2.16 documentation: Using pre-aggregations](https://github.com/cube-js/cube/blob/v1.2.16/docs/pages/product/caching/using-pre-aggregations.mdx)
+- [OpenLineage 1.23.0 specification](https://github.com/OpenLineage/OpenLineage/blob/1.23.0/spec/OpenLineage.md)
+- [Model Context Protocol architecture, June 18, 2025](https://modelcontextprotocol.io/specification/2025-06-18/architecture)

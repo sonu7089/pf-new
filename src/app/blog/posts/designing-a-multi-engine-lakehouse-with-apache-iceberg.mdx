@@ -1,0 +1,155 @@
+---
+title: "Designing a Multi-Engine Lakehouse with Apache Iceberg"
+summary: "A system design guide to using Iceberg snapshots, manifests, and a catalog so several query engines can share object storage without unsafe writes or hidden metadata debt."
+publishedAt: "2025-04-13"
+tag: "Data Architecture"
+subtitle: "Treat the catalog as a control plane and object storage as a data plane."
+---
+
+A data lake becomes difficult when several engines write to it. Spark may build daily aggregates, Flink may append events, and Trino may serve queries. Sharing Parquet is not enough. The system still needs one answer for which files and schema are current, what happens when compaction and ingestion overlap, and whether a failed writer can retry. Apache Iceberg answers with table metadata, immutable snapshots, and atomic catalog commits.
+
+## The Core Separation
+
+Object storage is the data plane. It holds data files, delete files, manifests, manifest lists, and table metadata files. A catalog is the control plane. It resolves a table name to its current metadata location and coordinates the atomic change to that location.
+
+```text
+ Spark writer        Flink writer        Trino reader
+      |                   |                   |
+      +-------------------+-------------------+
+                          |
+                          v
+                 +-------------------+
+                 | Iceberg catalog   |
+                 | names, auth,      |
+                 | current metadata  |
+                 +---------+---------+
+                           |
+                short-lived storage access
+                           |
+                           v
+                 +-------------------+
+                 | Object storage    |
+                 | metadata files    |
+                 | manifests         |
+                 | Parquet data      |
+                 +-------------------+
+                           ^
+                           |
+                 Maintenance workers
+```
+
+The catalog should not carry every data byte. Engines obtain metadata and authorized storage access, then use files directly. The catalog stays focused on identity, commits, policy, and discovery.
+
+## How an Iceberg Table Describes State
+
+An Iceberg table does not discover its contents by listing directories. A snapshot contains a manifest list. That list points to manifest files, and each manifest records data files with partition values and column statistics. The current table metadata points to the active snapshot and keeps the snapshot history.
+
+This tree gives readers a stable view. A reader selects a snapshot and keeps it even if a writer commits another, without taking a read lock. It also helps planning skip work. Manifest summaries remove groups of files, then file-level column bounds remove more. The table does not need large object-store listings to reconstruct state.
+
+The metadata hierarchy also makes time travel practical. A query can select an earlier snapshot for audit, debugging, or reproducible processing. Retention policy still matters because old snapshots keep referenced data files alive.
+
+## Make the Catalog a Real Control Plane
+
+A multi-engine platform needs one stable way to create, load, rename, and commit tables. The Iceberg REST catalog protocol gives engines a common API instead of requiring each engine and language to implement every catalog backend.
+
+The catalog should own table identity, current metadata pointers, authorization, commit validation, audit records, and delivery of scoped storage credentials.
+
+Use namespaces to separate domains, environments, and tenants. Do not rely only on bucket paths for authorization. A path is a storage detail, while a namespace is a data-product boundary that engines can understand.
+
+Catalog availability affects new planning and every commit. Use a durable database, redundant service instances, health checks, bounded retries, and tested backups. Metadata caches must honor version changes and never use a stale pointer for a write decision.
+
+## The Write and Commit Path
+
+An Iceberg writer follows a prepare-then-commit pattern:
+
+1. Load the current table metadata.
+2. Write new immutable data or delete files to object storage.
+3. Create manifests and a new metadata tree describing the proposed change.
+4. Ask the catalog to replace the current metadata pointer only if the expected base is still current.
+5. If another writer won, validate the new table state and retry only when the operation remains safe.
+
+This is optimistic concurrency. Writers do expensive work without a table lock, then a small catalog operation selects the current metadata version.
+
+Different operations have different conflict rules.
+
+| Concurrent operations | Usually safe to retry? | Required validation |
+| --- | --- | --- |
+| Two independent appends | Yes | Rebase the new manifest onto the latest snapshot |
+| Append and compaction | Often | Confirm the files selected for compaction still exist |
+| Two compactions of the same files | No for one writer | Reject the writer whose source files were already replaced |
+| Row update and overlapping delete | Depends on isolation and filter | Recheck files and rows that may match the operation |
+| Schema update and data write | Depends | Validate field IDs, required columns, and writer schema |
+
+Retry the metadata decision, not all work. Immutable files can often be reused. If an operation's assumptions no longer hold, failing is safer than forcing its commit.
+
+## Handle Commit Uncertainty Explicitly
+
+A difficult failure occurs when the catalog accepts a commit but the client loses the response. The writer sees a timeout and does not know whether its snapshot became current.
+
+Do not immediately run the whole write again. Give the operation a stable commit identity in job metadata or snapshot summary. After a timeout, reload the table and inspect recent snapshots for that identity and the expected files. If the commit is present, mark the job complete. If a conflicting commit is present and the operation is absent, follow the normal validation and retry path.
+
+This reconciliation step prevents duplicate appends. It also gives operators evidence when a network error and a data error look similar from the scheduler.
+
+## Orphan Files Are a Normal Byproduct
+
+Writers upload files before the catalog commit. If a job crashes or loses a conflict, some uploaded files may never be referenced by a valid snapshot. These are orphan files.
+
+Orphan cleanup must be conservative. A live writer may have uploaded a file that is not committed yet. Use a minimum age longer than the maximum write and retry duration. Limit deletion to the table's controlled prefix, log each batch, and use a dry-run report for high-value tables.
+
+Snapshot expiration and orphan cleanup solve different problems. Snapshot expiration removes old table history and makes files eligible for deletion. Orphan cleanup finds files that no valid snapshot references. Run them with separate policies and metrics.
+
+## Maintenance Is Part of the Architecture
+
+Streaming and frequent batch writes create small files and many metadata objects. Queries then spend more time opening files and planning work.
+
+A maintenance service should inspect table metadata, compact small files, rewrite poorly grouped manifests, expire snapshots beyond the recovery window, remove old orphans, and monitor metadata growth.
+
+Compaction is another writer, so it must use the same optimistic commit rules. Limit the partitions or time ranges processed in one run. This reduces conflict scope and makes retries cheaper. Schedule maintenance from table conditions, such as small-file count, instead of running every table at the same fixed time.
+
+Retention must reflect business recovery. Tags can preserve selected audit snapshots without keeping every intermediate snapshot forever.
+
+## Secure the Storage Boundary
+
+Do not give every engine a permanent key for the whole lake. Authenticate it to the catalog and provide short-lived access scoped to the table and action.
+
+Separate read, write, maintenance, and administrative roles. Encrypt data in transit and at rest. Audit user, engine, table, action, and result without exposing credentials in configuration or logs.
+
+## Operational Failure Modes
+
+| Failure mode | What it can cause | Design response |
+| --- | --- | --- |
+| Catalog unavailable | New queries and commits cannot resolve current state | Run redundant instances, use durable backing storage, and bound client retries |
+| Commit response lost | Duplicate write after a blind retry | Reconcile by operation identity and recent snapshot metadata |
+| Compaction conflicts with an update | Replaced or missing files | Validate source files at commit and retry only non-overlapping work |
+| Cleanup runs too aggressively | Deletion of an in-flight file | Use a conservative age threshold, scoped paths, and dry-run reports |
+| Small files grow without limit | Slow planning and expensive reads | Trigger measured compaction and monitor file-size distribution |
+| Credentials are too broad | One compromised engine exposes the lake | Vend short-lived, table-scoped access and separate roles |
+| Snapshots never expire | Metadata and storage cost keep growing | Define retention by audit and recovery needs, then monitor enforcement |
+
+## Implementation Checklist
+
+- [ ] Choose a catalog that every required engine can use consistently.
+- [ ] Separate catalog availability goals from object-storage availability goals.
+- [ ] Define namespace ownership and authorization rules.
+- [ ] Use atomic compare-and-swap commits and bounded retries.
+- [ ] Add a stable operation identity to every production write.
+- [ ] Reconcile uncertain commits before rerunning data work.
+- [ ] Test concurrent append, overwrite, delete, and compaction jobs.
+- [ ] Set file-size and manifest-health targets per workload.
+- [ ] Define snapshot, tag, and orphan retention independently.
+- [ ] Make orphan deletion age longer than the longest valid write.
+- [ ] Use short-lived, scoped storage credentials.
+- [ ] Back up and restore the catalog's durable state in a test environment.
+- [ ] Alert on commit failures, conflicts, file counts, and metadata growth.
+
+## Conclusion
+
+A multi-engine lakehouse needs more than Parquet in a shared bucket. Iceberg snapshots give consistent views, manifests describe the table, and optimistic concurrency rejects unsafe overlap. The catalog provides identity, authorization, and atomic commits. Reliability then depends on commit reconciliation, maintenance, orphan cleanup, scoped credentials, and tested recovery. Designed together, these controls let teams add engines without adding uncertainty.
+
+## Further Reading
+
+- [Apache Iceberg table format specification](https://iceberg.apache.org/spec/)
+- [Apache Iceberg reliability](https://iceberg.apache.org/docs/1.7.2/reliability/)
+- [Apache Iceberg REST catalog specification](https://iceberg.apache.org/rest-catalog-spec/)
+- [Apache Iceberg performance](https://iceberg.apache.org/docs/1.7.2/performance/)
+- [Apache Iceberg maintenance](https://iceberg.apache.org/docs/1.7.2/maintenance/)

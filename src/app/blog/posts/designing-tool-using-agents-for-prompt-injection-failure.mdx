@@ -1,0 +1,198 @@
+---
+title: "Designing Tool-Using Agents for Prompt Injection Failure"
+summary: "A defense-in-depth architecture that contains prompt injection with information-flow rules, capability control, safe execution, and recoverable writes."
+publishedAt: "2025-11-30"
+tag: "AI Security"
+subtitle: "Assume hostile content can influence the model, then keep that influence away from dangerous capabilities."
+---
+
+A procurement agent must compare three vendor quotes and create a draft purchase order. One quote hides text telling the agent to ignore the request, find bank details in old invoices, and upload them to an outside URL.
+
+To the model, the quote is both task data and possible instruction. If the same agent can read private files, call the network, and create orders, hostile data can reach a high-impact action.
+
+Filters help, but wording changes, content can hide in images or metadata, and normal business text contains instructions. Assume some injections will influence the model. Preserve the user's control flow, track data origins, and mediate every dangerous sink outside the model.
+
+## Define Sources, Sinks, and Trust
+
+A source brings information into the agent, such as email, websites, uploaded files, search results, database rows, or tool errors. A sink creates an effect or reveals information, such as sending email, changing a record, running code, opening a URL, or writing memory.
+
+Trust and sensitivity are different. An external email may be untrusted for control yet confidential. A public policy may be trusted for one decision and safe to disclose. Label both dimensions:
+
+- integrity: trusted instruction, approved data, or untrusted content
+- sensitivity: public, internal, confidential, or restricted
+
+Labels should follow derived values. If the model extracts an account number from an untrusted attachment, the result does not become trusted because it now fits a JSON schema. Schema validation proves shape, not intent or truth.
+
+Keep labels in typed envelopes outside free-form text. Only trusted code can change them. Derived values inherit the most restrictive sensitivity and lowest integrity of their inputs until an approved rule or person declassifies them.
+
+The user request is the main authority for the task. External content can supply facts needed to complete it, but it should not expand the goal, add a destination, request a secret, or grant a new tool.
+
+## Put Enforcement Around the Model
+
+The model is useful for interpreting uncertain data and proposing a plan. A separate control plane decides whether each step is allowed.
+
+```text
+ Trusted user request
+          |
+          v
+ +--------------------+       +--------------------+
+ | Task compiler and  |------>| Signed task manifest|
+ | policy selection   |       +---------+----------+
+ +--------------------+                 |
+                                        v
+ Untrusted sources             +--------+---------+
+          |                    | Planner model    |
+          v                    | proposes actions|
+ +--------------------+        +--------+---------+
+ | Read-only fetcher  |                 |
+ | and data labels    |-----------------+
+ +--------------------+                 v
+                              +----------+----------+
+                              | Capability broker   |
+                              | source-to-sink rules|
+                              +----+-------------+--+
+                                   |             |
+                              low risk      approval needed
+                                   |             |
+                                   +------+------+ 
+                                          v
+                              +-----------+--------+
+                              | Isolated executor  |
+                              | operation ledger   |
+                              +-----+----------+---+
+                                    |          |
+                                    v          v
+                              Business API  Egress proxy
+                                    |
+                                    v
+                              Audit and alerts
+```
+
+The task manifest captures the goal, tenant, allowed data sources, permitted tools, approved destinations, important limits, expiry, and policy version. Build it only from the authenticated user request and trusted application state. If an LLM helps parse that request, validate the result against deterministic rules before signing it.
+
+A vague request should not create broad authority. If a user asks to "handle my inbox," ask which messages, actions, and destinations are allowed. A later email cannot fill those permission gaps. Expire the manifest when the task or its trusted assumptions change.
+
+The planner can propose an action, but cannot sign the manifest, issue credentials, lower a label, or approve its own request. This prevents text inside a document from silently changing the control plane.
+
+## Separate Reading From Writing
+
+An agent that only reads hostile content has less impact than one that can also change systems. Use separate roles even if both use the same model family.
+
+The reader has required sources but no write credentials. It returns typed facts, source IDs, short evidence spans, and labels. It cannot call arbitrary URLs from a document.
+
+The planner combines the trusted goal with those facts. The executor receives normalized arguments and evidence references, not an entire mailbox or webpage. It should not see unrelated secrets.
+
+Let the executor resolve sensitive values by reference after authorization. It can receive a customer ID and fetch only the permitted address with its scoped capability. Passing the full customer record through the planner creates needless exposure.
+
+This boundary does not remove every risk. A hostile value may enter an allowed field, and some tasks must send untrusted data. The broker therefore evaluates the complete flow, not only the tool name.
+
+Creating a draft for an approved vendor may be allowed. A bank account found only in the quote needs independent verification. A destination introduced by that quote cannot receive invoice data.
+
+## Use a Capability Broker as the Reference Monitor
+
+The broker sits on every tool path. Executors have no broad, ambient credentials. An allowed call receives a short-lived capability limited to:
+
+- actor, tenant, tool, and operation
+- resources, fields, limit, and destination
+- one operation ID and expiry
+
+The broker evaluates the signed manifest, normalized arguments, data labels, tool risk, approval, and policy. Bind the capability to the manifest version, tool-catalog version, normalized argument hash, evidence IDs or hashes, approval digest, and operation ID. Consume it atomically once, with only an idempotent replay of the same operation allowed. The broker denies unknown tools, fields, destinations, and label transitions.
+
+Keep read and write tools separate at the API. A method called `get_customer` must not make a business update. Freeze the catalog by version so a changed description cannot add capability.
+
+Enforce simple invariants. Untrusted content cannot request a secret. Restricted data cannot reach a public sink. A document cannot select an external destination. A write cannot exceed the user's limit. Ordinary software keeps these checks active even if an injection persuades the model.
+
+Some flows are intentionally open, such as sending a user-selected attachment to a named partner portal. Encode the exception with a source class, destination, size limit, and expiry. Never turn it into a rule that any attachment may go to any URL.
+
+## Make Approval Specific and Verifiable
+
+Approval works only when a person sees the real decision. Show the action, target, fields, sources, destination, risk, and whether untrusted content influenced it.
+
+Create a digest over the task ID, tool-catalog version, normalized arguments, evidence IDs or hashes, labels, policy, and operation ID. Bind approval to that digest, the approver, and an expiry. Any changed evidence, tool meaning, account, amount, recipient, or attachment invalidates it.
+
+The approver needs authority for the action. The agent cannot choose any employee. Duplicate messages return the recorded decision, while conflicting decisions are rejected and audited.
+
+Reserve approval for high-impact or hard-to-reverse operations. Routine actions still need deterministic policy. Approving every call creates fatigue.
+
+## Control Egress and Isolate Execution
+
+Route every outbound connection through an egress proxy. Deny by default, then allow only destinations and protocols required by the task.
+
+Validate the resolved address, block private and metadata ranges, check every redirect, limit request size, and reject credentials in unexpected headers or URLs. Resolve and connect under one policy to reduce DNS rebinding risk. An untrusted destination is not an allowlist entry.
+
+Code, browser, and file work need an ephemeral sandbox with read-only inputs, a small workspace, resource limits, and no inherited cloud credentials. Send its network traffic through the proxy and destroy it after collecting approved outputs.
+
+A sandbox limits host damage, but it does not decide whether sending a customer file is allowed. The capability broker and information-flow policy still own that decision.
+
+## Make Every Write Recoverable
+
+A business request may succeed while the executor loses its response. Blind retry can duplicate an order or email.
+
+Create an operation ledger before writing, with states such as PLANNED, AUTHORIZED, SENT, CONFIRMED, UNKNOWN, and FAILED. Build its idempotency key from the task, logical step, and argument hash. Store the approval digest and capability reference.
+
+Send the same key on every retry. Prefer downstream idempotency because an adapter can crash after a remote side effect but before recording success. An adapter-side unique constraint is enough only when reliable status reconciliation can prove the remote outcome. For UNKNOWN outcomes, query by operation or business reference before sending again. Automatic retry is safe only with downstream idempotency or conclusive reconciliation. Otherwise stop for review.
+
+Compensation is a separate authorized action, not a promise that the original action never happened. Canceling an order may be possible. Recalling an external email may not be.
+
+## Audit the Decision Path
+
+Audit the requester, manifest, policy, source labels, broker decision, approver, operation ID, and data destination.
+
+Keep sensitive content out of normal logs. Store hashes, IDs, redacted arguments, and restricted evidence references. If the central sink is slow, use a bounded durable queue and apply backpressure before losing protected records.
+
+Monitor new destinations, repeated denials, cross-tenant attempts, approval mismatches, catalog drift, unknown writes, and sandbox violations. Compare spikes after a model or prompt release with the prior version.
+
+Version broker policy and labels like application code. Test candidates in shadow mode, compare allow and deny decisions, and keep a fast rollback. An emergency bypass needs a named operator, narrow scope, short expiry, and a separate alert.
+
+## Failure Modes and Recovery
+
+| Failure mode | Containment | Recovery |
+| --- | --- | --- |
+| Classifier misses injection | Broker still limits sinks | Add the case to regression tests |
+| Broker is unavailable | Deny protected calls | Restore it, then authorize the exact operation again |
+| Write response is lost | Mark the operation UNKNOWN | Reconcile before retrying |
+| Action changes after approval | Reject the digest | Request fresh approval |
+| URL redirects to a private host | Block the connection | Audit and review the allowlist |
+| Audit queue fills | Stop high-risk actions | Drain, verify, and reopen |
+
+Fail closed where the missing control protects a side effect or restricted data. A public documentation search may degrade to cached results. A payroll update should stop.
+
+## Test Security Properties, Not Phrases
+
+Place hostile instructions in email, quoted replies, PDFs, images, filenames, calendar entries, search results, tool errors, and another agent's response. Include encoded, multilingual, hidden, and multi-step attacks.
+
+Test normal tasks too. A defense that blocks every tool is useless. Track task completion and policy violations separately. AgentDojo provides realistic tool tasks, while local tests should cover production data flows.
+
+Assert invariants, not exact model text. Restricted data never reaches an unapproved sink. Untrusted content never expands the task. One operation ID writes at most once. Changed arguments invalidate approval. Tenants stay isolated.
+
+Stop an executor after sending, time out the broker, fill the audit queue, change DNS, replay approval, and return malformed tool output. Run adaptive tests for each important model, prompt, policy, and catalog release.
+
+## Implementation Checklist
+
+- [ ] Map sources, sinks, integrity, and sensitivity.
+- [ ] Sign a task manifest from trusted intent.
+- [ ] Separate read and write credentials.
+- [ ] Broker and scope every tool call.
+- [ ] Treat tool metadata and output as untrusted.
+- [ ] Bind approval to arguments and operation ID.
+- [ ] Control egress and sandbox execution.
+- [ ] Make writes idempotent and recoverable.
+- [ ] Keep durable, redacted audit records.
+- [ ] Test injection, isolation, replay, and crashes.
+
+## Conclusion
+
+Prompt injection is dangerous because an agent reads instructions and data through one language interface. A stronger prompt cannot carry the full security boundary.
+
+Design the surrounding system for model failure. Preserve trusted intent in a signed task, label untrusted and sensitive data, separate reading from writing, and place a capability broker before every sink. Use exact approval for risky actions, controlled egress, isolated execution, durable audit, and idempotent writes.
+
+The goal is not to prove that the model will never follow hostile text. The goal is to make sure hostile text cannot turn a useful reading task into an unauthorized business action or data leak.
+
+## Further Reading
+
+- [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+- [Defeating Prompt Injections by Design, March 2025](https://arxiv.org/abs/2503.18813)
+- [Design Patterns for Securing LLM Agents against Prompt Injections, June 2025](https://arxiv.org/abs/2506.08837)
+- [AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents, 2024](https://arxiv.org/abs/2406.13352)
+- [MCP tools security guidance, protocol revision 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
+- [Mitigating the risk of prompt injections in browser use, November 24, 2025](https://www.anthropic.com/research/prompt-injection-defenses)

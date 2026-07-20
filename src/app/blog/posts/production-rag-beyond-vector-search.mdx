@@ -1,0 +1,204 @@
+---
+title: "Production RAG Beyond Vector Search: Hybrid Retrieval and Reranking"
+summary: "A system design guide to production RAG with fresh, versioned ingestion, lexical and dense retrieval, fusion, reranking, tenant isolation, evaluation, and safe embedding migrations."
+publishedAt: "2025-06-22"
+tag: "AI and Data"
+subtitle: "Why retrieval quality depends on data lifecycle, security, evaluation, and recovery as much as vector similarity."
+---
+
+A vector database can find similar passages, but that is not enough for a production retrieval-augmented generation system.
+
+Users ask for exact error codes, product names, policy clauses, and recent changes. Documents are edited and deleted. Embedding models change. Tenants must never see each other's data. Production RAG therefore needs a dependable data lifecycle, several retrieval signals, measured quality, and safe rollback.
+
+## The Production Problem
+
+Imagine a multi-customer knowledge assistant. Content arrives from wikis, support systems, storage, and databases. The answer path must reflect edits and access changes without rebuilding everything.
+
+Several failures can look like a model problem:
+
+- An old chunk remains searchable after its source was deleted.
+- Dense search misses an exact ticket ID.
+- Lexical search misses a paraphrased question.
+- A tenant filter is applied after candidate selection and returns too few results.
+- A new embedding index has lower recall for an important query class.
+- A retry creates duplicate chunks with different identifiers.
+
+A good design makes each of these failures visible and recoverable.
+
+## A Reference Architecture
+
+```text
+ [Source Connectors]
+        |
+        v
+ [Change Log / Queue] ---> [Dead Letter Queue]
+        |
+        v
+ [Parse + Normalize + ACL Resolve]
+        |
+        v
+ [Versioned Chunk Builder]
+        |
+        +------> [Lexical Index]
+        |
+        +------> [Dense Index v1]
+        |              [Dense Index v2 during migration]
+        v
+ [Document + Chunk Metadata Store]
+
+ Query + authenticated tenant
+        |
+        v
+ [Tenant / ACL Filter]
+        |
+        +--> [Lexical Candidates]
+        +--> [Dense Candidates]
+                    |
+                    v
+              [Rank Fusion]
+                    |
+                    v
+               [Reranker]
+                    |
+                    v
+       [Context Builder + Generator]
+                    |
+                    v
+          [Citations + Trace + Evals]
+```
+
+## Freshness Starts at Ingestion
+
+Prefer a change feed, webhook, or incremental connector with a durable checkpoint. Advance the checkpoint only after the change is safely recorded in a queue or change table.
+
+Give each source a stable identity such as `tenant_id + source_system + source_id`. Store its version, content hash, access-control version, parser version, and ingestion state.
+
+An ingestion event should describe an upsert or delete. Expect duplicate and out-of-order delivery. Compare source versions before writing and ignore an older event when a newer version is active. If the source has no reliable version, confirm the authoritative current state before promotion.
+
+## Deterministic Chunks, Metadata, and Deletes
+
+Build stable chunk IDs from tenant, document version, chunking version, section path, and sequence. A retry then upserts instead of adding copies.
+
+Every chunk should carry metadata needed before generation:
+
+- tenant and access-control identifiers
+- document ID and source version
+- chunk ID, position, section path, and page reference
+- content hash and language
+- parser, chunker, and embedding versions
+- active state and indexed timestamps
+
+Keep document metadata in a transactional store even if vectors live elsewhere. It provides the source of truth for lifecycle and repair.
+
+A delete must be a first-class event. Mark the source version inactive, remove or tombstone its lexical and vector entries, invalidate caches, and record completion for every index. For strict privacy cases, physically delete the data and verify removal.
+
+## Combine Lexical and Dense Retrieval
+
+Dense retrieval is strong when the question and source use different words with similar meaning. Lexical retrieval is strong for exact names, codes, quoted phrases, and rare terms. Production systems usually need both.
+
+PostgreSQL full-text search can provide lexical ranking, while pgvector provides vector similarity in the same database. Qdrant also supports hybrid queries with dense and sparse candidates.
+
+At query time:
+
+1. Normalize the query without removing meaningful identifiers.
+2. Resolve tenant and access filters from authenticated context.
+3. Run lexical and dense retrieval in parallel with those filters.
+4. Ask each retriever for more candidates than the final context needs.
+5. Fuse the ranked lists.
+6. Rerank the strongest combined candidates.
+7. Build context from active, allowed versions only.
+
+Raw lexical and vector scores are not directly comparable. Reciprocal Rank Fusion, or RRF, combines rank positions instead. It rewards documents near the top of either list and gives extra value to documents found by both. Qdrant exposes RRF for hybrid queries.
+
+## Rerank a Small Candidate Set
+
+Fusion improves coverage. A reranker improves ordering. A cross-encoder or another relevance model reads the query together with each candidate and assigns a more direct relevance score.
+
+Retrieve a bounded candidate set, deduplicate overlapping chunks, then rerank only that set. Keep the final context diverse enough that one long document does not occupy every position.
+
+The reranker is an optional quality stage, not a single point of failure. Give it a short timeout. If it fails, fall back to fused order and mark the trace. If both retrievers fail, do not ask the generator to answer from empty or unverified context. Return a clear unavailable response or use a separately approved fallback.
+
+## Decisions and Failure Modes
+
+| Decision or failure | Risk | Production response |
+| --- | --- | --- |
+| Dense search only | Misses exact codes and rare names | Add lexical candidates and fuse ranks |
+| Lexical search only | Misses paraphrases and related concepts | Add dense candidates |
+| Filter after retrieval | Too few allowed candidates and possible leakage | Apply tenant and ACL filters inside each retriever |
+| Duplicate ingestion event | Repeated chunks distort ranking | Use deterministic IDs and version-aware upserts |
+| Source delete reaches one index only | Stale content remains searchable | Track delete completion per index and repair partial work |
+| Reranker timeout | Query path fails despite useful candidates | Fall back to fused order and record degraded mode |
+| Embedding model replaced in place | No safe comparison or rollback | Build a parallel index and switch after evaluation |
+| Cache key omits access scope | One user can receive another user's context | Include tenant, principal scope, corpus version, and query |
+
+## Tenant Isolation Is Part of Retrieval
+
+The tenant ID must come from a verified token or server-side session, never from the prompt or model output. Apply tenant and access-control filters in lexical search, dense search, metadata reads, and cache lookups. Check them again in the context builder. PostgreSQL row-level security can add a default-deny boundary for normal database access.
+
+Run the query service with a non-owner database role that does not have `BYPASSRLS`. Table owners, superusers, and roles with that privilege can bypass row-level security. Use `FORCE ROW LEVEL SECURITY` where the table owner should also be subject to the policy, and test access with the same role used in production.
+
+Approximate vector indexes need special attention with filters. pgvector documents that filtering may happen after an approximate scan, leaving fewer results than requested. Iterative scans can search farther when filters remove candidates. Test tenant-filtered queries, not only global search.
+
+Use least-privilege service roles, separate ingestion writes from query reads, encrypt data, and avoid logging private passages. When access changes, invalidate affected caches.
+
+## Evaluate Retrieval Before Answers
+
+Build an evaluation set with known relevant passages, exact identifiers, paraphrases, updates, access changes, and questions that should return no answer.
+
+Measure candidate recall, rank quality, tenant-filter correctness, delete freshness, index lag, empty results, and reranker fallback.
+
+Evaluate the complete answer for citation support, faithfulness, and correct refusal when evidence is missing. Keep query, filter, candidate, ranking, reranker, context, and index-version traces so a bad answer is reproducible. Run the same evaluation set before changing chunking, embeddings, fusion, filters, or reranking.
+
+## Use Blue-Green Embedding Migrations
+
+Replacing vectors in place makes rollback almost impossible. Treat a new embedding model like a database migration.
+
+Create a green index beside the active blue index. Give it a new embedding version and dimension contract. Backfill active chunks using deterministic chunk IDs, while new ingestion writes to both versions or records work for both. Track coverage by tenant and source.
+
+When green is complete, evaluate both indexes and shadow selected queries. Compare recall, ranking, latency, filtered results, and empty-result behavior. Promote green through an alias or configuration switch, while blue remains available for rollback.
+
+If green performs poorly, switch back without reprocessing documents. Delete blue only after the rollback window and audit checks.
+
+## Recovery and Idempotency
+
+Use a state record for every document version and target index. A practical state machine includes received, parsed, chunked, embedding pending, indexed, delete pending, active, failed, and quarantined.
+
+Workers claim a unique key such as `document_version + target_index + operation`. They upsert and mark completion only after target confirmation. Redelivery then repeats the write safely.
+
+Use a transactional outbox when a database update must publish an indexing event. Commit the change and event together. After capped attempts, send failures to a dead letter queue with enough data for controlled replay.
+
+Reconciliation should compare metadata with each index to find missing versions, extra chunks, incomplete deletes, and embedding gaps. Repairs should use the same queue and idempotent workers as live ingestion.
+
+## Implementation Checklist
+
+- Define stable tenant, document, version, and chunk identities.
+- Capture source checkpoints and write changes durably before advancing them.
+- Make upsert and delete events idempotent and order-aware.
+- Store parser, chunker, embedding, ACL, and schema versions.
+- Apply tenant and access filters inside every retriever.
+- Run lexical and dense retrieval in parallel.
+- Choose and evaluate a rank-fusion method such as RRF.
+- Add a bounded reranker with timeout and fused-order fallback.
+- Build caches with tenant, access scope, and corpus version in the key.
+- Test filtered recall on the actual vector index configuration.
+- Create retrieval and end-to-end evaluation sets.
+- Record candidate, fusion, reranking, filter, and index-version traces.
+- Migrate embeddings with parallel indexes and a reversible switch.
+- Track index completion for upserts and deletes.
+- Add dead letter handling, replay tools, and reconciliation jobs.
+- Monitor freshness lag, empty results, delete lag, recall, and degraded queries.
+
+## Conclusion
+
+Production RAG is a search and data-lifecycle system first. Dense and lexical retrieval provide different signals, fusion combines them, and reranking improves order. None helps if data is stale or access filters are weak.
+
+The architecture becomes dependable when every document and chunk has a version, every write can be repeated safely, every query carries verified access scope, and every major change can be evaluated and rolled back.
+
+That is the step beyond a vector-search demo: retrieval that stays fresh, secure, measurable, and recoverable as the corpus and models change.
+
+## Further Reading
+
+- [Qdrant hybrid and multi-stage queries](https://qdrant.tech/documentation/search/hybrid-queries/)
+- [pgvector documentation](https://github.com/pgvector/pgvector)
+- [PostgreSQL full-text search](https://www.postgresql.org/docs/current/textsearch.html)
+- [PostgreSQL row security policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)

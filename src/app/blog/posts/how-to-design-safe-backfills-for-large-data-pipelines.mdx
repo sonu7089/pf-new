@@ -1,0 +1,197 @@
+---
+title: "How to Design Safe Backfills for Large Data Pipelines"
+summary: "A control-plane design for replaying large historical ranges with immutable inputs, idempotent writes, bounded load, validation gates, atomic promotion, and rollback."
+publishedAt: "2025-08-17"
+tag: "Data Engineering"
+subtitle: "Treat a backfill as a recoverable data migration, not a large query pointed at production."
+---
+
+A backfill often starts with a small request: fix a transformation and recompute old partitions. The dangerous part is scale. Months of work can overload a source, compete with today's pipeline, publish half-correct output, or send old records through downstream systems as if they were new.
+
+Assume an orders pipeline used the wrong timezone when assigning revenue to a business day. The fix must rebuild a year of daily partitions while current orders keep arriving. Every partition may retry, workers may die, and late records may still change old business dates. A safe design needs a control plane, a private output area, and a deliberate publish step.
+
+## Start With a Backfill Contract
+
+Before starting compute, write the exact correction:
+
+- affected dataset, columns, and date range,
+- code and configuration version,
+- immutable input snapshot or source offsets,
+- partition boundaries and timezone,
+- expected output identity,
+- validation rules and approvers,
+- capacity limit and stop conditions,
+- promotion and rollback method,
+- and the policy for data that arrives after the snapshot.
+
+This contract becomes an immutable run specification. It should have a unique `backfill_id` and never be edited in place after approval. A changed range, input, or code version creates a new run. Keep mutable execution state in separate run and partition records, with every transition copied to an append-only log.
+
+## Reference Architecture
+
+```text
+ Operator / API
+      |
+      v
+ +-----------------------+
+ | Backfill control plane|
+ | manifest + run state  |
+ | claims + leases       |
+ +-----+------------+----+
+       |            |
+       | claims     | metrics / pause
+       v            v
+ +-----------------------+       +------------------+
+ | Isolated worker pool  | ----> | Validation jobs  |
+ | bounded concurrency   |       | rules + checksums|
+ +-----------+-----------+       +---------+--------+
+             |                             |
+             v                             v
+ +-----------------------+       +------------------+
+ | Immutable input       |       | Shadow output    |
+ | snapshot / object IDs |       | run + partition  |
+ +-----------------------+       +---------+--------+
+                                           |
+                                      approval gate
+                                           |
+                                           v
+                                 Atomic catalog promotion
+                                           |
+                                           v
+                                  Protected consumers
+```
+
+The scheduler may launch tasks, but the control plane owns correctness. It knows the intended partitions, which input each task reads, what was produced, and whether publication is allowed.
+
+## Build a Manifest, Not a Task List
+
+Create one mutable execution record for the run and one partition record per unit of work. Each record references the immutable specification. A partition record can contain:
+
+```text
+backfill_id, partition_key, input_snapshot, code_digest,
+state, attempt, lease_owner, lease_token, lease_expires_at,
+output_location, output_snapshot, validation_result, error
+```
+
+Use a small state machine such as `PLANNED`, `CLAIMED`, `RUNNING`, `WRITTEN`, `VALIDATED`, `PROMOTED`, and `FAILED`. State transitions should be compare-and-set updates in a transactional database. Store an append-only transition log for audit and debugging.
+
+Partition size is an operational choice. A year as one task is hard to retry. Millions of tiny tasks overload the scheduler and metadata stores. Choose units that can finish inside a practical lease, produce useful validation, and be retried without excessive waste. Large days can be split by a stable hash bucket rather than by a changing row count.
+
+## Pin Immutable Inputs
+
+Reproducibility requires a fixed input. Use a lakehouse snapshot ID, object version manifest, database export, or bounded log offsets. Do not let workers query an unversioned view of "all rows before today." Two attempts could then read different data and both claim success.
+
+Record the schema and transformation image digest with the input. Keep raw inputs immutable for the full execution and rollback window. If the source is a production database without snapshots, first copy the required columns into a protected staging dataset at a declared cutoff. Avoid making every worker scan the live database.
+
+Late data is handled separately. A fixed base snapshot gives the backfill a stable starting point; a later catch-up phase handles records that arrived after it.
+
+## Coordinate Workers With Claims and Leases
+
+A worker should atomically claim one eligible partition. The update succeeds only if the partition is unclaimed or its old lease expired. The worker receives a new lease token, then renews its lease while it runs.
+
+Use database server time for expiry. A worker with a paused process or broken network can continue after its lease expires, so a lease alone does not prevent duplicate work. Add a monotonically increasing fencing token to every attempt. Promotion accepts output only from the current token.
+
+The write must still be idempotent. If worker A finishes after worker B takes over, A's files can remain unreferenced, but they must never replace B's approved output. Leases reduce wasted work; stable output identity and guarded commits provide correctness.
+
+## Make Every Write Safe to Repeat
+
+The best write pattern depends on the target:
+
+- For a full partition replacement, write the complete partition to a private path and commit it atomically through a table format.
+- For row corrections, merge by a stable business key and correction version.
+- For append-only facts, include an event ID and enforce one logical row per ID.
+- For files, use paths containing `backfill_id`, partition key, and attempt token, then reference only the accepted attempt.
+
+Attach `backfill_id` and partition identity to table commit metadata. If the commit succeeds but the client loses the response, inspect the table history or control ledger before retrying. "Unknown" is a real outcome, not a failure that should be blindly repeated.
+
+Never overwrite a shared object path as a commit protocol. Object storage cannot atomically update a set of keys. Let the table catalog or a versioned pointer define which complete file set readers can see.
+
+## Protect Production With Admission Control
+
+Backfill capacity must be separate and lower priority than current data. Put workers in an isolated queue or compute pool. Limit active partitions, source queries, shuffle capacity, catalog commits, and writes to each downstream service.
+
+A fixed concurrency limit is only the first guard. Watch source latency, warehouse queue time, streaming lag, object-store errors, and current pipeline deadlines. Reduce admission when production becomes unhealthy and pause claims when a stop condition is reached. Existing workers can finish or be canceled according to the runbook.
+
+Airflow 3.0.2 supports backfill concurrency controls and pools, but scheduler limits do not protect every dependency. A single task may open many connections or create a large scan. Give heavy tasks more capacity weight and enforce quotas close to the source and sink.
+
+Do not emit normal downstream freshness events from shadow writes. Otherwise dashboards, caches, exports, and notifications may consume incomplete history. Publish one versioned completion signal only after the chosen consistency boundary is promoted.
+
+## Write to Shadow Output First
+
+Direct writes to production make validation and rollback harder. Use a temporary table, namespace, or lakehouse audit branch for the whole run. Name it from the run ID and apply retention so failed runs can be inspected and later cleaned.
+
+Validate each partition before marking it complete. Useful gates include schema compatibility, unique keys, null rules, referential checks, business invariants, source-to-output totals, and deterministic hashes over sorted business keys and values. Row counts alone can match while values are wrong.
+
+Also validate the dataset as a whole. Cross-partition windows, running balances, and deduplication may be correct inside each day but wrong at boundaries. Store rule versions, query digests, and redacted result summaries in the execution record. Put sensitive samples in a restricted evidence store with explicit retention, then reference them by ID. Approval should reference this evidence without copying private row values into the control database.
+
+## Choose a Promotion Boundary
+
+| Output shape | Promotion method | Main tradeoff |
+| --- | --- | --- |
+| Complete replacement table | Swap a view or catalog pointer | Simple rollback, but readers must use the indirection |
+| Iceberg table | Validate an audit branch, then fast-forward only while the production head remains its ancestor | Atomic table view, but concurrent commits need coordination |
+| Independent date partitions | Atomically replace approved partitions | Earlier value, but consumers may see mixed versions |
+| Key-level corrections | Transactional merge with correction version | Flexible, but rollback needs a before image |
+
+Choose based on consumer consistency. Finance may require the whole year to change at once. A large fact table may allow partition-by-partition publication if every row carries a data version and consumers can tolerate a mixed period.
+
+Before promotion, record the current production snapshot or pointer as the rollback target. Promotion should be one guarded metadata operation where possible. Verify that production has not changed beyond the assumptions used during validation. An Iceberg branch can fast-forward only when the current production head remains an ancestor of the audit branch. If ingestion has advanced it, pause commits at a known barrier and incorporate the delta into the audit branch before validating again, or publish through another guarded pointer-swap design. Never assume fast-forward can discard concurrent production commits. Iceberg's optimistic conflict checks and atomic snapshots are useful for enforcing this boundary.
+
+## Reconcile Current and Late Data
+
+The base snapshot is not the end of the story. Keep current ingestion running while the backfill writes shadow output. Record a source sequence cutoff with the base snapshot, then capture later changes independently.
+
+After the base passes validation, apply the tail from just after that cutoff through a declared watermark. Order corrections by source sequence, not worker arrival. A record with an old business date but a new ingestion sequence belongs to the tail. Use the same idempotent key rules as normal ingestion.
+
+Close the remaining race with a final source barrier. Either dual-write changes after that barrier to both targets, or fence the current writer, catch the shadow target up through the exact offset, and atomically switch writer and reader routing under one epoch. Keep the captured delta until the rollback window ends so it can be replayed toward either target. Do not use wall-clock boundaries with ambiguous inclusivity. Store exact offsets or snapshot IDs and state the brief consistency behavior to downstream owners.
+
+## Failure Modes and Recovery
+
+| Failure mode | Risk | Safe response |
+| --- | --- | --- |
+| Worker dies after writing files | Orphan output and repeated compute | Expire lease, claim again, and reference only the accepted attempt |
+| Lease expires while worker still runs | Two attempts race | Fence commits with the current lease token |
+| Commit succeeds but response is lost | Duplicate retry | Reconcile commit metadata by run and partition identity |
+| Input changes between retries | Non-reproducible output | Pin snapshot, object versions, or log offsets |
+| Backfill saturates a source | Current pipeline misses its deadline | Stop new claims and enforce dependency-level quotas |
+| Partition checks pass but boundary logic fails | Whole dataset is wrong | Run global and cross-partition validation before promotion |
+| Late event arrives during rebuild | Promoted output misses a correction | Capture and replay a tail by source sequence |
+| Bad output is promoted | Consumers read incorrect history | Restore the recorded pointer or table snapshot and block completion events |
+
+## Rollback, Security, and Operations
+
+Rollback is easiest before irreversible side effects. Backfill workers should write data, not send customer messages or invoke business APIs. Downstream jobs should read a promoted version and deduplicate completion signals. Keep post-promotion changes in the durable source log or retained delta until rollback expires. If the old target is restored, replay those changes before moving both writers and readers back under a new routing epoch. If a consumer already exported or acted on bad data, restoring a table snapshot is not enough; that consumer needs its own correction plan.
+
+Use separate service identities for planning, execution, validation, and promotion. Workers need read access to pinned inputs and write access only to their shadow namespace. A smaller approver role performs promotion. Encrypt sensitive staging data, keep secrets out of manifests, audit every state change, and apply the source's retention and deletion rules to temporary copies.
+
+Dashboards should show completed, active, failed, and expired claims; throughput; retry age; validation failures; production impact; storage growth; and estimated remaining work. Back up the control database and manifest log. A recovery drill should rebuild control state, reconcile accepted table commits, reclaim expired partitions, and resume without publishing twice.
+
+## Implementation Checklist
+
+- [ ] Write an immutable run contract with range, code, input, and owners.
+- [ ] Pin source snapshots, object versions, or log offsets.
+- [ ] Split work into stable, retryable partitions.
+- [ ] Store partition state and an append-only transition log.
+- [ ] Claim work atomically with expiring leases and fencing tokens.
+- [ ] Make writes idempotent by run, partition, and business identity.
+- [ ] Reconcile unknown commit outcomes before retrying.
+- [ ] Isolate compute and cap pressure at every dependency.
+- [ ] Add automatic pause conditions that protect current pipelines.
+- [ ] Write to a shadow table, namespace, or audit branch.
+- [ ] Run partition, boundary, and whole-dataset validation.
+- [ ] Record the previous production snapshot before promotion.
+- [ ] Promote through an atomic, guarded metadata operation.
+- [ ] Capture late arrivals by source sequence and replay the tail.
+- [ ] Protect promotion with a separate least-privilege role.
+- [ ] Test worker loss, duplicate attempts, rollback, and control-plane restore.
+
+## Conclusion
+
+A safe backfill is a controlled migration with evidence. Immutable inputs make retries reproducible. Claims and leases distribute work, while fencing and idempotency make duplicate attempts harmless. Throttling protects today's data. Shadow output creates space for real validation. Atomic promotion and a recorded snapshot make rollback practical. With a manifest that connects every partition to its input, code, output, and decision, even a very large repair becomes a system that can stop, recover, and explain itself.
+
+## Further Reading
+
+- [Apache Airflow 3.0.2 backfills](https://airflow.apache.org/docs/apache-airflow/3.0.2/core-concepts/backfill.html)
+- [Apache Airflow 3.0.2 pools](https://airflow.apache.org/docs/apache-airflow/3.0.2/administration-and-deployment/pools.html)
+- [Apache Iceberg 1.9.0 reliability](https://iceberg.apache.org/docs/1.9.0/reliability/)
+- [Apache Iceberg 1.9.0 branching and audit workflows](https://iceberg.apache.org/docs/1.9.0/branching/)
+- [Amazon S3 versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html)

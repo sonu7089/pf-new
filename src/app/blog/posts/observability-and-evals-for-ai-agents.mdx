@@ -1,0 +1,267 @@
+---
+title: "Observability and Evals for AI Agents: From Traces to Trust"
+summary: "A practical architecture for tracing agent decisions, measuring workflow quality, protecting sensitive data, and turning production failures into repeatable evaluations."
+publishedAt: "2025-10-05"
+tag: "AI Engineering"
+subtitle: "Logs show that a request failed. Traces and evals show where, why, and whether the fix is better."
+---
+
+A customer support agent gives the wrong answer about a refund. The final response is logged, but the reason is not. Retrieval may have returned an old policy, a tool may have received the wrong order ID, or a handoff may have lost context.
+
+An agent run is a changing graph of model turns, tools, retrieval, handoffs, checks, and retries. Two runs with the same question may take different paths, so normal request logs are not enough.
+
+Production trust needs two connected systems:
+
+- Observability explains what happened during a run.
+- Evaluations judge whether the behavior and result were good.
+
+Tracing without evaluation gives a detailed story with no quality standard. Evaluation without tracing gives a score with little evidence for debugging. The useful architecture joins them.
+
+## A Trace and Evaluation Architecture
+
+Instrument the runtime where it knows the workflow structure. Export through a privacy filter, build metrics from the trace model, and send selected completed runs to asynchronous evaluators.
+
+```text
+ User request
+      |
+      v
+ +------------------+
+ | Agent runtime    |
+ | model, tools,    |
+ | handoffs, checks |
+ +--------+---------+
+          | spans and events
+          v
+ +------------------+      +-------------------+
+ | Redaction and    | ---> | Trace store       |
+ | telemetry buffer |      | searchable runs   |
+ +--------+---------+      +---------+---------+
+          |                          |
+          v                          v
+ +------------------+      +-------------------+
+ | Metrics backend  |      | Evaluation queue  |
+ | latency and cost |      | sampled run IDs   |
+ +------------------+      +---------+---------+
+                                      |
+                                      v
+                            +-------------------+
+                            | Rules, graders,   |
+                            | human review      |
+                            +---------+---------+
+                                      |
+                                      v
+                            Datasets and release gates
+```
+
+Evaluation should not delay the response. Enqueue a completed trace for later scoring. Keep only safety checks that must block an output or action in the synchronous path.
+
+## Use a Trace as the Unit of Work
+
+A trace represents one logical workflow, such as resolving a support request or reviewing a contract. A span represents one timed operation inside that trace.
+
+The OpenAI Agents SDK traces generations, tools, handoffs, guardrails, and custom operations. OpenTelemetry provides common semantic names for generative AI operations, model details, and token usage. A shared contract keeps fields consistent across backends.
+
+A practical span tree may look like this:
+
+```text
+trace: resolve_support_case
+  span: classify_intent
+    span: model_generation
+  span: retrieve_policy
+    span: vector_search
+  span: account_specialist
+    span: get_order
+    span: decide_refund
+      span: model_generation
+    span: issue_refund
+  span: output_guardrail
+```
+
+Every span needs a trace ID, span ID, parent ID, timing, status, operation name, and selected attributes. Use a conversation or group ID to connect traces, but keep it separate from the trace ID because one conversation may contain many runs.
+
+## Define the Telemetry Contract First
+
+Instrumentation becomes hard to use when teams add fields only during incidents. Start with a small required contract.
+
+At the trace level, capture:
+
+- workflow name and version
+- agent name and version
+- trace and conversation IDs
+- user tenant or a protected pseudonymous key
+- environment and deployment version
+- final status and failure category
+- total latency, model requests, tool calls, and token usage
+
+At the model span level, capture:
+
+- provider and requested model
+- response model when available
+- prompt template name and version
+- input and output token counts
+- latency and retry count
+- structured-output validation status
+- finish reason
+
+At the tool span level, capture:
+
+- server and tool name
+- read or write classification
+- argument schema version
+- idempotency or operation ID for writes
+- latency, status, and error class
+- result size and validation status
+
+For retrieval, record the source ID, strategy, document IDs, scores, and index version, not full documents. For handoffs, record source, target, reason, and context-package version.
+
+## Separate Content From Metadata
+
+Full prompts and tool results can aid debugging, but they may copy private data or credentials into a second system.
+
+Use an allowlist for captured fields. Metadata should be the default. Content capture should be a separate, restricted option with clear retention.
+
+A redaction processor can:
+
+1. remove authorization headers and secret patterns
+2. replace direct user identifiers with stable protected IDs
+3. drop or mask sensitive tool arguments
+4. truncate oversized content
+5. attach data-classification labels
+6. route highly sensitive traces to an approved store
+
+Run redaction before export. Encrypt telemetry, limit access by role and tenant, audit sensitive-trace access, and define deletion behavior. Treat content capture as a security decision.
+
+## Build Metrics From Spans
+
+Agent metrics should show both system health and workflow behavior.
+
+System metrics include:
+
+- trace completion rate
+- model and tool latency by dependency
+- timeout and retry rate
+- token usage and estimated cost
+- queue delay for background work
+- telemetry export delay and dropped spans
+
+Workflow metrics include:
+
+- turns per completed task
+- tool calls per task
+- repeated calls with the same arguments
+- handoff count and handoff loops
+- approval frequency
+- guardrail activation rate
+- percentage of runs ending in escalation
+
+Fewer tool calls are not automatically better. Metrics find changes and outliers. Evals judge quality.
+
+Set objectives for end-to-end latency, background-task age, and telemetry loss. Use percentiles because a few long loops can disappear inside an average.
+
+## Classify Failure Before Alerting
+
+One generic agent_failed counter sends engineers in the wrong direction. Create a failure taxonomy that matches ownership and recovery.
+
+| Failure class | Trace evidence | First response |
+| --- | --- | --- |
+| Model provider | Timeout, rate limit, or server error on generation span | Retry with backoff or switch approved fallback |
+| Invalid model output | Schema validation failed | Repair once, then stop or escalate |
+| Retrieval quality | No relevant documents or stale index version | Inspect query and index pipeline |
+| Tool contract | Invalid arguments or response schema | Fix schema, adapter, or prompt |
+| Ambiguous write | Tool timed out after request was sent | Reconcile by operation ID before retry |
+| Orchestration | Handoff loop or turn limit reached | Inspect routing rule and context transfer |
+| Guardrail | Input, output, or action blocked | Review policy reason, not just model output |
+| Telemetry | Missing child spans or exporter backlog | Repair instrumentation without hiding app health |
+
+Alert on symptoms that need action. A short model retry may be normal. A rising number of ambiguous writes is urgent. Repeated handoff loops after one deployment point to an orchestration regression.
+
+## Design Evals Around Decisions
+
+An evaluation should test a behavior that matters. Start with concrete questions:
+
+- Did the agent choose the correct tool?
+- Were tool arguments grounded in user and system data?
+- Did the answer cite the current policy?
+- Did the agent avoid an action outside its permission?
+- Did the handoff preserve required context?
+- Was the final answer complete and clear?
+
+Use several evaluator types.
+
+Deterministic checks are best for facts that software can verify: JSON schema validity, required citation presence, permitted tool names, exact calculations, operation IDs, and forbidden actions.
+
+Reference checks compare results with expected facts or actions while allowing valid wording differences. Model graders can assess relevance or clarity, but need a narrow rubric, structured output, versioning, and calibration against human decisions. Human reviewers should see the result and relevant trace path, not a raw event dump.
+
+## Connect Production to an Evaluation Dataset
+
+The best dataset is not a random collection of easy prompts. It should represent important workflows and known failure boundaries.
+
+Build it from:
+
+- common user intents
+- policy edge cases
+- high-impact tool actions
+- incidents and near misses
+- examples with missing or conflicting data
+- cases that require refusal or escalation
+- long workflows with handoffs
+
+When a production run fails, remove or replace private data, preserve the structure of the failure, add an expected behavior, and store it as a regression case. Link the case to the source trace ID in a restricted catalog.
+
+Track each case's category, source, expected path, and risk. Keep a fixed release set and a separate development set.
+
+Run candidate and current versions on the same release set. Compare by category so gains on simple answers cannot hide harm to high-risk actions.
+
+## Online Evaluation Without User Delay
+
+Production evaluation catches traffic shapes that offline tests miss. Sample completed traces into an evaluation queue. Sampling can be higher for new versions, rare tools, high-risk actions, failures, and low-confidence results.
+
+Make the evaluation job idempotent. Use a key built from trace ID, evaluator name, and evaluator version. If the queue delivers the job twice, the evaluation store should return or replace the same logical result, not count it twice.
+
+Keep online graders away from live side effects. They inspect stored evidence and produce scores or labels. They never replay a write tool. If evidence is missing because of privacy settings, return not_evaluable instead of guessing.
+
+Route severe results to human review with the trace, rubric, and policy version. Confirmed defects can enter the regression suite.
+
+## Make Telemetry Reliable but Not Dangerous
+
+The agent should not fail because a trace backend is briefly unavailable. Export through a bounded buffer, batch normal events, flush important traces at worker boundaries, and monitor exporter health.
+
+Choose a clear overload policy. Dropping debug-level content can be acceptable. Dropping audit events for financial actions may not be. Put required audit records on a durable path separate from optional diagnostic telemetry.
+
+Give every span a stable ID for deduplication. Preserve trace context across queues, workers, and concurrent child tasks.
+
+Sampling must keep complete traces when possible. A trace with a final error but missing tool spans is hard to diagnose. Head sampling decides early and is cheap. Tail sampling can retain errors, slow runs, and unusual paths after seeing the outcome, but it needs more collector capacity.
+
+## Implementation Checklist
+
+- [ ] Define a trace as one logical agent workflow.
+- [ ] Create spans for models, retrieval, tools, handoffs, and guardrails.
+- [ ] Standardize required fields and failure categories.
+- [ ] Propagate trace context through queues and concurrent tasks.
+- [ ] Record prompt, agent, tool schema, index, and policy versions.
+- [ ] Capture write-operation IDs so retries can be reconciled.
+- [ ] Redact secrets and private content before export.
+- [ ] Separate restricted audit evidence from normal telemetry.
+- [ ] Monitor exporter delay, buffer use, and dropped spans.
+- [ ] Build deterministic checks before adding model graders.
+- [ ] Version every rubric, grader prompt, and grader model.
+- [ ] Calibrate model graders with human-reviewed examples.
+- [ ] Turn incidents and edge cases into regression tests.
+- [ ] Evaluate candidate and current versions on the same release set.
+- [ ] Make online evaluation jobs idempotent.
+- [ ] Never let an evaluator replay production side effects.
+
+## Conclusion
+
+Trust does not come from a dashboard full of tokens and latency charts. It comes from being able to explain a run, judge its behavior, and prove that a change fixes the right problem without creating another one.
+
+Tracing provides the execution story. Metrics reveal patterns. Evals apply product and safety standards. Human review handles the cases where context and judgment still matter.
+
+When these systems share stable IDs and versions, every important failure can become evidence, every confirmed defect can become a test, and every release can be compared against what the system has already learned.
+
+## Further Reading
+
+- [OpenAI Agents SDK tracing](https://openai.github.io/openai-agents-python/tracing/)
+- [OpenAI Agents SDK trace reference](https://openai.github.io/openai-agents-python/ref/tracing/traces/)
+- [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+- [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/)

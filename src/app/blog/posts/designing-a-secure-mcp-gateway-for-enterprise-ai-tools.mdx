@@ -1,0 +1,211 @@
+---
+title: "Designing a Secure MCP Gateway for Enterprise AI Tools"
+summary: "A system design guide for putting authentication, authorization, consent, validation, isolation, and audit controls between AI hosts and enterprise MCP servers."
+publishedAt: "2025-11-09"
+tag: "AI Architecture"
+subtitle: "Give agents useful tools without turning every connection into a new security exception."
+---
+
+An enterprise assistant may start by searching an internal knowledge base. Soon it can read customer records, create tickets, query finance data, and update project systems. The first integration is easy. The twentieth is a security problem.
+
+Servers may use different identity models. Some tools read data, while others change it. A model can select a tool, but it should not decide which employee may use it. Returned text can also influence a later model turn.
+
+Model Context Protocol, or MCP, gives clients and servers a common way to expose tools, resources, and prompts. It does not remove the need for enterprise controls. The MCP architecture intentionally gives the host responsibility for orchestration, consent, and isolation. A secure gateway helps a company apply those controls consistently across many remote servers.
+
+## What the Gateway Must Do
+
+The gateway is not the agent, the model, or the authorization server. It is an enforcement and routing layer between MCP clients in approved hosts and MCP servers that expose enterprise capabilities.
+
+Its main jobs are:
+
+- authenticate the client and user
+- validate token audience, scope, and requested capability
+- preserve isolation and route sessions correctly
+- validate messages, arguments, and consent
+- control outbound access and contain failures
+- record an audit trail
+
+A useful high-level design looks like this:
+
+```text
+ +-----------------------+
+ | Enterprise AI host    |
+ | model + MCP clients   |
+ +-----------+-----------+
+             |
+             | HTTPS, OAuth access token
+             v
+ +--------------------------------------------------+
+ | Secure MCP gateway                               |
+ |                                                  |
+ |  Authn -> Audience check -> Policy -> Validation |
+ |                    |                             |
+ |          Consent / approval gate                 |
+ |                    |                             |
+ |       Session registry -> Router -> Audit        |
+ +----------+-------------------+-------------------+
+            |                   |
+            v                   v
+   +----------------+   +----------------+
+   | CRM MCP server |   | Data MCP server|
+   +-------+--------+   +-------+--------+
+           |                    |
+           v                    v
+       CRM API             Query service
+```
+
+The host should still create isolated MCP client connections for the servers it uses. If the gateway presents a combined catalog, it must retain the original server identity internally. Tool names alone are not a safe security boundary. A policy decision needs the server, tool, user, tenant, requested arguments, and business context.
+
+## Start With Clear Trust Zones
+
+Draw trust boundaries before writing routing code.
+
+The host may request tool use, but a model-generated call is not authorized by default. The gateway enforces policy. Each server is trusted only for registered capabilities, and its output remains untrusted. Authentication proves identity. Authorization decides whether that identity may perform this action.
+
+For every call, build a policy input with:
+
+- user and service identity
+- tenant and organization
+- client application ID
+- target MCP server ID
+- tool or resource name
+- normalized arguments
+- requested data classification
+- read or write effect
+- estimated risk
+- approval state
+
+The policy engine should return allow, deny, or require approval. It can also return obligations, such as a row limit, field redaction, allowed account list, or maximum refund amount.
+
+## Register Servers and Capabilities
+
+Do not let any host connect to any URL and call it an enterprise MCP server. Maintain a registry.
+
+Each registry entry needs an immutable server ID, owner, approved endpoint, transport, protocol version, allowed capabilities, schemas, data class, tool risk, OAuth scopes, outbound destinations, limits, and review status.
+
+During initialization, clients and servers negotiate capabilities. The gateway compares them with the registry. A newly discovered write tool stays unavailable until approved.
+
+Review catalog changes and record the approver and schema version. Invalidate cached discovery when the registry or server version changes.
+
+## Design OAuth Boundaries Correctly
+
+For remote HTTP connections, an authorization server issues tokens to an MCP client for a protected resource. When the gateway is that resource, it validates signature, issuer, expiry, audience, resource, client, user, and scopes before routing.
+
+Never use token passthrough. A token issued for the MCP gateway must not be forwarded unchanged to a CRM, cloud API, or database service. That creates a confused deputy risk and makes audience checks meaningless.
+
+Instead, use a separate downstream credential:
+
+1. The client obtains a token specifically for the gateway resource.
+2. The gateway validates that token and evaluates policy.
+3. A connector obtains a short-lived token intended for the downstream API.
+4. The connector calls the API with the narrower identity and scope.
+5. The audit event links the upstream actor to the downstream operation.
+
+Use authorization code flow with PKCE where a user is involved. Require HTTPS. Keep tokens out of URLs, model context, tool results, and normal logs. Store refresh tokens in a protected secret service, rotate them, and prefer short access-token lifetimes.
+
+Consent must show the client, target, scopes, and redirect URI. Bind it to the user and client ID, match redirect URIs exactly, and use a fresh single-use state value.
+
+## Enforce Tool-Level Policy
+
+A scope such as crm.write is usually too broad on its own. The gateway should inspect the tool and validated arguments.
+
+For update_customer, one user may edit a support note but not a credit limit. Another may work only in one region. Normalize arguments before policy evaluation. Reject unknown fields, invalid types, oversized strings, unsupported URLs, and ambiguous IDs. Resolve each object to its tenant instead of trusting a model-supplied tenant ID.
+
+Classify tools by effect:
+
+| Tool class | Example | Default control |
+| --- | --- | --- |
+| Read, low sensitivity | Search public product docs | Allow with rate limit |
+| Read, sensitive | Fetch employee record | Scope check, field filtering, audit |
+| Reversible write | Create draft ticket | Policy check and idempotency key |
+| High-impact write | Issue refund or delete record | Explicit approval and strict limit |
+| Network or code execution | Fetch URL or run command | Sandbox, allowlist, and approval |
+
+The tool description helps the model choose a tool, but it is not a trusted policy statement. Security metadata must come from the gateway registry.
+
+## Make Writes Safe to Retry
+
+MCP carries requests, but the business operation still needs idempotency. A network timeout can occur after the backend commits a change and before the response reaches the host.
+
+For each write, create an operation ID. Bind it to the user, server, tool, normalized arguments, and approval. Send it downstream and store the result in an operation ledger.
+
+If the same operation arrives again:
+
+- return the stored result when it completed
+- reject it when the arguments changed
+- continue recovery when it is still running
+- reconcile with the downstream system when its outcome is unknown
+
+Bind approval to a hash of the normalized action. If the recipient, amount, or destination changes, require new approval.
+
+## Protect Sessions and Transport
+
+The stable 2025 MCP architecture uses a stateful session between one client and one server. Streamable HTTP can use an MCP session ID, but that ID is not authentication.
+
+Validate authorization on every inbound request. Generate secure, unpredictable session IDs. Bind a session record to the authenticated user, client, tenant, backend server, and negotiated protocol version. Expire idle sessions and remove them on explicit termination.
+
+For a multi-instance gateway, route through a shared registry keyed by user ID and session ID. Never let one tenant consume another tenant's queued events.
+
+Validate the Origin header to reduce DNS rebinding risk. Local servers should bind to localhost, not every network interface. For production endpoints, require HTTPS and an approved host name.
+
+## Contain Network and Server Risk
+
+OAuth discovery and tool arguments may contain hostile URLs. Route outbound traffic through an egress proxy. Require HTTPS, block private and reserved IP ranges unless approved, validate redirects, and consider pinning DNS resolution. Prefer allowlists for high-risk connectors.
+
+Run local or untrusted servers in a sandbox with minimal permissions, resource limits, and no inherited cloud credentials. Show the full startup command before installation.
+
+Treat server output as untrusted. Limit payload size, validate declared content types, escape output in user interfaces, and prevent returned text from silently authorizing another tool call.
+
+## Failure Modes and Recovery
+
+| Failure mode | Gateway behavior | Recovery |
+| --- | --- | --- |
+| Authorization server unavailable | Deny new sessions, do not bypass authentication | Retry discovery with bounded backoff |
+| Backend MCP server times out | Keep the operation ID and mark outcome unknown | Query status or reconcile before retry |
+| Session route is missing | Return a clear session error | Reinitialize after fresh authentication |
+| Tool catalog changes unexpectedly | Quarantine new capabilities | Require owner review and registry update |
+| Policy engine is unavailable | Fail closed for protected tools | Use a short-lived, signed policy cache only where approved |
+| Audit sink is slow | Buffer signed events with a size limit | Apply backpressure before losing required records |
+| Suspicious outbound URL appears | Block before DNS or connection | Record the attempt and alert security |
+
+Do not let graceful degradation mean silent loss of security. A knowledge search might continue with a safe cached policy. A payment tool should stop.
+
+## Audit Without Leaking Data
+
+Record the actor, policy version, approval, server, operation ID, timing, status, and a redacted argument summary. Do not copy full prompts, tokens, or sensitive results into normal audit logs. Encrypt restricted evidence and audit access to it.
+
+Alert on repeated denials, unexpected tool discovery, cross-tenant attempts, approval bypasses, and new outbound destinations.
+
+## Implementation Checklist
+
+- [ ] Map the host, gateway, servers, and downstream APIs as separate trust zones.
+- [ ] Keep isolated client-to-server sessions.
+- [ ] Register every server, owner, endpoint, capability, and risk level.
+- [ ] Compare negotiated capabilities with an approved catalog.
+- [ ] Validate token issuer, audience, resource, expiry, and scope.
+- [ ] Never pass the gateway token to a downstream API.
+- [ ] Evaluate policy with user, tenant, server, tool, and arguments.
+- [ ] Require versioned approval for high-impact actions.
+- [ ] Validate schemas and reject unknown fields.
+- [ ] Add operation IDs and an idempotency ledger for writes.
+- [ ] Bind session IDs to authenticated identity and expire them.
+- [ ] Validate Origin and require HTTPS for remote connections.
+- [ ] Put discovery and connectors behind controlled egress.
+- [ ] Redact sensitive content from logs and traces.
+- [ ] Test confused deputy, SSRF, session hijack, and replay cases.
+- [ ] Fail closed when a required security control is unavailable.
+
+## Conclusion
+
+MCP makes tools easier to connect. A secure gateway makes those connections governable.
+
+The strongest design keeps identity, policy, consent, sessions, and business side effects separate. It validates tokens for the right audience, gives downstream systems different credentials, treats tool metadata and output as untrusted, and makes every important write recoverable through idempotency and reconciliation.
+
+That structure lets teams add useful capabilities without asking the model to carry the security boundary. The model can propose an action. The gateway decides whether the enterprise should allow it.
+
+## Further Reading
+
+- [MCP architecture, protocol revision 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/architecture)
+- [MCP authorization, protocol revision 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
+- [MCP transports, protocol revision 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+- [MCP security best practices](https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices)

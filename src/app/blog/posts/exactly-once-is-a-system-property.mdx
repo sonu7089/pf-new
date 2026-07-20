@@ -1,0 +1,171 @@
+---
+title: "Exactly-Once Is a System Property: Reliable Streaming Design"
+summary: "A practical guide to defining and building exactly-once behavior across replayable sources, stateful processors, lakehouse sinks, and external side effects."
+publishedAt: "2025-03-09"
+tag: "Data Engineering"
+subtitle: "A checkpoint inside one engine is only one part of an end-to-end reliability guarantee."
+---
+
+Exactly-once is often misunderstood. A processing engine may let each event affect managed state once, while the full pipeline still sends two emails, appends two rows, or loses an update. Exactly once is not one job setting. It comes from the source, processor, sink, and external effects sharing recovery rules. Consider Kafka payment events processed by Flink into Iceberg and an alert service. The design must explain a failure at every boundary.
+
+## Define the Promise Before the Architecture
+
+There are at least four different promises that teams call exactly once:
+
+- **delivery:** a record arrives at a consumer one time,
+- **processing state:** a record changes managed state one time,
+- **sink output:** a record has one logical effect in the destination,
+- **business effect:** an outside action, such as a payment or message, happens one time.
+
+These promises are not equal. Exactly-once state can use at-least-once delivery. After a failure, the processor restores earlier state and reprocesses input. Code runs again, but the committed effect remains singular.
+
+Write the actual promise in plain language. For example: “Every committed Kafka event affects each published Iceberg snapshot at most once, and no committed event is lost. Alerts may be attempted more than once, but the alert service deduplicates them by operation ID.”
+
+That statement is much more useful than an unqualified exactly-once label.
+
+## Reference Architecture
+
+```text
+ Producers
+    |
+    v
++----------------+       checkpoints       +------------------+
+| Kafka topics   | <---------------------- | Flink coordinator|
+| durable replay |                         +--------+---------+
++-------+--------+                                  |
+        |                                           v
+        |                                  Durable checkpoint store
+        v
++-------------------------+
+| Flink job               |
+| validate and deduplicate|
+| event-time windows      |
++-----------+-------------+
+            |
+       checkpoint-bound commit
+            |
+            v
++-------------------------+          +----------------------+
+| Iceberg table           |          | Alert outbox topic   |
+| catalog + object store  |          | idempotent consumer  |
++-------------------------+          +----------------------+
+            ^
+            |
+     compaction and cleanup
+```
+
+The source must be replayable. The processor must restore state and source positions together. The sink must either join the checkpoint protocol or make repeated writes produce the same result. External actions need their own idempotency boundary.
+
+## Checkpoints Create a Consistent Recovery Point
+
+Flink inserts checkpoint barriers into source streams. As barriers move through the job, operators snapshot their state and record the corresponding input positions. If the job fails, it restores the last completed checkpoint and asks the source to replay from the stored positions.
+
+This gives exactly-once changes to managed state when the source participates correctly. Kafka is suitable because consumers can seek back to recorded offsets.
+
+Short checkpoint intervals reduce replay but create more coordination, storage, and sink commits. Long intervals reduce overhead but increase recovery work. Store checkpoints in durable shared storage, set timeouts from measured state size, retain selected savepoints for upgrades, and assign stable operator IDs.
+
+## The Sink Must Participate
+
+Exactly-once state does not automatically make the output exactly once. The sink needs one of two designs.
+
+A transactional sink prepares output and publishes it only when the matching checkpoint completes. Recovery aborts or ignores uncommitted work. Kafka transactions and checkpoint-aware file sinks follow this model.
+
+An idempotent sink uses a stable operation key so repetition has one logical effect. A database can enforce a unique event ID, while an object-store writer can commit immutable files through a table snapshot and reconcile uncertainty before retrying.
+
+The Iceberg Flink sink commits with Flink checkpoints. It still needs commit monitoring and maintenance because a sink guarantee does not remove catalog outages or small files.
+
+## Side Effects Need a Separate Boundary
+
+Calling an email, ticketing, or payment API inside a record-processing function is unsafe. The API can succeed, then the worker can fail before the checkpoint completes. After recovery, Flink replays the event and calls the API again.
+
+Publish an action request to an outbox topic as part of the checkpointed output. A separate consumer performs the external action with an idempotency key such as:
+
+```text
+payment-alert:account-481:event-93517:rule-v3
+```
+
+The action service stores that key with the confirmed result. A duplicate returns the result. If a timeout leaves the outcome unknown, query the remote system before retrying. Unknown is a real state.
+
+When a provider has no idempotency support, put a controlled adapter in front of it. The adapter can keep an operation ledger with `PLANNED`, `SENT`, `CONFIRMED`, and `UNKNOWN` states and route uncertain cases to reconciliation.
+
+## Event Identity and Deduplication
+
+Producer retries can create duplicates before Flink. Kafka's idempotent producer helps, but an application can still create two logical events. Give each business event a stable ID and deduplicate within the real replay window. If duplicates can arrive days later, a ten-minute state TTL is not enough.
+
+An unlimited deduplication map becomes an availability problem. Document the duplicate window, expire state safely, and enforce longer uniqueness in the destination when required.
+
+## Watermarks Define Completeness, Not Delivery
+
+Event time answers when the business event happened. Processing time answers when the system handled it. They are often different.
+
+Flink watermarks estimate progress in event time. A watermark says the system believes events up to a time boundary have mostly arrived. Windows can then emit results without waiting forever.
+
+Watermarks do not make late events disappear. The architecture needs a late-data policy:
+
+- update an existing result within an allowed lateness period,
+- send very late records to a correction stream,
+- rebuild the affected partition,
+- or deliberately ignore them with a measured count.
+
+Configure idle-source detection so one quiet partition does not stop all watermarks. Monitor lag per partition and tune lateness for each event source.
+
+## Backpressure and Checkpoint Health
+
+During backpressure, aligned checkpoint barriers can take a long time to cross the job. Unaligned checkpoints can reduce barrier delay by including in-flight data in the checkpoint, but they do not solve the overloaded operator or slow sink causing the pressure.
+
+Monitor checkpoint duration, alignment, size, failures, source lag, backpressure, and sink commit time together. Healthy checkpoints with growing end-to-end lag still describe an unhealthy pipeline.
+
+Scale the constrained stage, reduce expensive serialization, fix key skew, or control downstream concurrency. Recovery features should not hide a system that cannot process its normal arrival rate.
+
+## Streaming Creates Storage Maintenance Work
+
+Frequent checkpoint commits can create many small data files. This improves freshness but hurts lakehouse planning and scan performance. The pipeline therefore needs a second control loop for compaction, manifest maintenance, snapshot expiration, and orphan cleanup.
+
+Compaction must be safe beside ingestion. It should rewrite a bounded set of files and validate that those files are still current at commit time. Keep snapshot retention long enough for operational rollback and consumer time travel. Run orphan cleanup only after an age that exceeds the longest valid write and retry window.
+
+## Failure Modes and Recovery
+
+| Failure point | What recovery replays | Required protection |
+| --- | --- | --- |
+| Worker fails before a checkpoint | Input after the last completed checkpoint | Restore operator state and source offsets together |
+| Sink prepares data but checkpoint fails | Prepared output for the failed checkpoint | Abort or hide uncommitted output |
+| Sink commit succeeds but response is lost | Client may attempt the commit again | Reconcile by stable operation or snapshot identity |
+| External API succeeds before worker failure | The action request is replayed | Idempotency key and outcome lookup |
+| Late event arrives after a window closes | The old window may already be published | Allowed lateness, correction stream, or partition rebuild |
+| Checkpoints slow under backpressure | Recovery point becomes old | Fix the constrained stage and tune checkpoint mode carefully |
+| Compaction overlaps ingestion | Both writers may touch related files | Optimistic conflict validation and bounded rewrite scope |
+
+## Security and Operational Recovery
+
+Authenticate clients, encrypt broker traffic and checkpoint storage, and authorize access per topic. Use short-lived lakehouse credentials. Keep secrets out of job parameters, logs, and checkpoint metadata.
+
+Practice recovery by terminating workers before and after sink preparation, blocking checkpoint storage, restarting from an older savepoint, duplicating input events, delaying one partition, and losing the response to a successful catalog commit. Verify logical outputs, not only job status.
+
+## Implementation Checklist
+
+- [ ] Define exactly-once scope in plain language.
+- [ ] Use a replayable source and durable source positions.
+- [ ] Store processor state and source positions in one checkpoint.
+- [ ] Choose checkpoint interval from recovery and commit requirements.
+- [ ] Use a transactional or idempotent sink.
+- [ ] Create stable event and operation IDs before processing.
+- [ ] Move external side effects behind an outbox and idempotent consumer.
+- [ ] Define reconciliation for unknown outcomes.
+- [ ] Set deduplication retention from real replay behavior.
+- [ ] Design allowed lateness and correction paths.
+- [ ] Monitor checkpoint health with end-to-end lag.
+- [ ] Compact small files without conflicting with ingestion.
+- [ ] Protect checkpoints, topics, catalog access, and storage credentials.
+- [ ] Run failure drills at every commit boundary.
+
+## Conclusion
+
+Exactly-once behavior combines smaller guarantees. Kafka supplies replay. Flink joins source positions with managed state. A transactional or idempotent sink turns replay into one logical output. An outbox and reconciliation protect external actions. Every boundary must answer what committed, what can repeat, and how to check uncertainty. Then exactly once becomes a system property, not a label.
+
+## Further Reading
+
+- [Apache Flink fault tolerance](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/learn-flink/fault_tolerance/)
+- [Apache Flink checkpointing](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/fault-tolerance/checkpointing/)
+- [Apache Flink watermarks](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/event-time/generating_watermarks/)
+- [Apache Kafka design and delivery semantics](https://kafka.apache.org/39/design/design/)
+- [Apache Iceberg Flink writes](https://iceberg.apache.org/docs/1.7.1/flink-writes/)

@@ -1,0 +1,210 @@
+---
+title: "Data Contracts and Lineage: Stopping Broken Data at the Source"
+summary: "A system design for enforcing data contracts in CI and at runtime, then using lineage to find owners and downstream impact before a schema change becomes a business incident."
+publishedAt: "2025-02-02"
+tag: "Data Governance"
+subtitle: "Turn schema, quality, ownership, and compatibility rules into executable controls."
+---
+
+A broken pipeline often starts with a reasonable local change. A team renames a column, changes a type, or stops filling an unused field. Its service works, but later a finance model fails and nobody knows the upstream owner. The producer and consumers had no executable agreement or reliable dependency map. A contract defines the promise, while lineage shows who depends on it.
+
+## A Practical Goal
+
+Assume a checkout service publishes an `orders` topic and warehouse table for fraud, revenue, and support teams. It wants to replace decimal `total_amount` with a structured value and currency code.
+
+The platform should answer these questions before deployment:
+
+- Is the proposed change backward compatible?
+- Which consumers read the old field?
+- Which team owns each affected data product?
+- Can old and new versions run together?
+- What happens to records that violate the contract?
+
+Those answers require an architecture, not a wiki page.
+
+## Reference Architecture
+
+```text
+ Producer repository
+ contract YAML + application code
+              |
+              v
+      +------------------+
+      | Pull request CI  |
+      | syntax, diff,    |
+      | compatibility,   |
+      | consumer checks  |
+      +--------+---------+
+               |
+        approved release
+               |
+      +--------+---------+
+      |                  |
+      v                  v
+ Schema registry    Warehouse build gate
+ and stream checks  and quality tests
+      |                  |
+      +--------+---------+
+               |
+        valid data or quarantine
+               |
+               v
+      +------------------+
+      | OpenLineage      |
+      | run and dataset  |
+      | metadata events  |
+      +--------+---------+
+               |
+               v
+      Lineage graph + catalog
+      owners, columns, versions,
+      quality, and blast radius
+```
+
+The contract repository is the design-time control plane. Runtime validators enforce the approved version. The lineage graph connects the promise to real jobs and datasets.
+
+## What Belongs in a Contract
+
+A useful contract contains more than columns. The Open Data Contract Standard provides a machine-readable structure. For this February 2025 design, ODCS 2.2.2 is the published reference.
+
+At minimum, define:
+
+- dataset or topic identity and version,
+- field names, types, nullability, and keys,
+- business meaning and allowed units,
+- quality rules and their severity,
+- freshness and availability expectations,
+- owner and support channel,
+- sensitive-data classification,
+- retention or usage limitations,
+- and the compatibility policy.
+
+Keep physical and logical meaning separate. `DECIMAL(18,2)` is a type. “Total charged in the order currency” is meaning. Fields can share a type and still be incompatible because meaning changed.
+
+A schema registry can reject an incompatible event schema. A warehouse can enforce some constraints, while data tests detect content problems. The contract should name the authoritative control for each rule.
+
+## Make Pull Requests the First Gate
+
+Contract checks should run when a producer opens a pull request.
+
+The CI pipeline should validate syntax, compare with the released contract, classify field changes, apply compatibility rules, run producer and consumer tests, query affected lineage, and require approval for a breaking version.
+
+Use a semantic diff. Reordering YAML is harmless, while removing a required field is not. Changing UTC time to local time can break meaning even when the type stays the same.
+
+Store the contract version with the application release so each record can be tied to active code and rules.
+
+## Compatibility Determines Deployment Order
+
+Schema registries support backward, forward, full, and transitive compatibility. Focus on the reader and writer behavior each mode guarantees.
+
+| Compatibility goal | Safe rollout idea | Main risk |
+| --- | --- | --- |
+| New consumers read old data | Upgrade consumers first | Old consumers may not understand new output |
+| Old consumers read new data | Upgrade producers first only when new consumers can still read history | New consumers may fail on retained old data |
+| Both directions | Producers and consumers can move independently within allowed changes | Rules are stricter and require careful optional fields |
+| Transitive compatibility | Check a new version against all retained versions | Historical clients increase the change constraint |
+
+Compatibility cannot detect every semantic break. `amount` can keep its Avro type while changing from dollars to cents, so record units and test meaning.
+
+dbt model contracts can check public model names and types before a build. Warehouse enforcement differs, so separate declared from enforced constraints. A metadata primary key may not prevent duplicates.
+
+## Use Dual Publish for Breaking Changes
+
+Avoid changing `total_amount` in place. Add `total_amount_value` and `total_amount_currency`, or publish `orders_v2`.
+
+A controlled migration defines the new contract, deploys consumers that read both forms, dual publishes, compares quality, moves consumers, finds remaining users through lineage, and removes the old version after an announced deadline.
+
+Keep one event ID across both versions so consumers can deduplicate. For tables, preserve source version and update identity so backfills do not create another logical row.
+
+## Runtime Enforcement Needs Quarantine
+
+CI cannot catch bad production values, so runtime validation must inspect real records and tables.
+
+Classify rules by response:
+
+- **reject:** the producer must not publish the record,
+- **quarantine:** preserve the record outside the trusted path,
+- **warn:** allow it but open a visible quality signal,
+- **observe:** collect a baseline before setting a threshold.
+
+A quarantine record needs a secure payload reference, contract version, failed rule, producer, event ID, time, retry count, and ordering information for safe repair.
+
+Invalid types do not improve with backoff. Cap retries, then repair the data or contract. Protect quarantine storage like the sensitive source.
+
+## Build Lineage as an Event System
+
+OpenLineage represents jobs, runs, input and output datasets, and facets. Column lineage describes which input fields produce or influence an output.
+
+Send events through durable transport and treat ingestion as at least once. Deduplicate by run ID, event type, time, and producer. Because events arrive late or out of order, build an explicit run-state model.
+
+Canonical naming is critical. `warehouse.prod.orders`, `PROD.ORDERS`, and a storage URI may be one dataset. Define namespace rules and aliases or the graph will split one node into several.
+
+Store graph history because an incident needs the dependencies that existed when bad data was produced.
+
+## Turn Lineage Into a Blast-Radius Service
+
+For a breaking field, query column edges. A consumer that reads `order_id` but not `total_amount` may be unaffected.
+
+For each affected node, return:
+
+- dataset and field,
+- direct or indirect dependency,
+- production owner and support channel,
+- latest successful run,
+- freshness deadline,
+- contract version,
+- and known dashboards or services.
+
+Rank impact by graph distance, business importance, and whether bad data arrived before downstream processing. This can collapse many alerts into one producer incident.
+
+Lineage is evidence, not perfect truth. Track platform coverage and distinguish parsed edges from runtime evidence. Missing lineage must not mean “no consumers.”
+
+## Failure Modes and Controls
+
+| Failure mode | Consequence | Control |
+| --- | --- | --- |
+| Contract exists only in documentation | Producer deploys without validation | Store it with code and make CI blocking for public interfaces |
+| Schema is compatible but meaning changes | Consumers return plausible wrong results | Record units and semantics, then add domain tests |
+| Warehouse declares but does not enforce a key | Duplicate rows pass the build | Run an explicit uniqueness test and monitor failures |
+| Quarantine retries forever | Cost grows and ordering becomes unclear | Classify permanent errors, cap retries, and require repair |
+| Lineage names do not match | Blast radius misses consumers | Use canonical namespaces, aliases, and identity tests |
+| Lineage event is delivered twice | Duplicate graph state | Make ingestion idempotent by run and event identity |
+| Dual-published events reach one consumer twice | Duplicate business action | Preserve one event ID across versions and deduplicate |
+| Contract registry is unavailable | Deploy or runtime path may stop | Cache signed released contracts and define fail-open versus fail-closed per risk |
+
+## Security and Operations
+
+Authorize contract proposal, approval, and release. Review sensitivity, retention, and masking changes. Sign or hash released artifacts.
+
+Lineage can expose SQL, locations, field names, and environment values. Minimize collection, redact secrets, encrypt transport, restrict graph access, and prefer team ownership.
+
+Monitor contract check failures, quarantined record count and age, schema-registry errors, lineage event delay, graph ingestion failures, unresolved dataset identities, and lineage coverage for critical platforms.
+
+## Implementation Checklist
+
+- [ ] Select a machine-readable contract format and pin its version.
+- [ ] Define physical schema, business meaning, quality, SLA, owner, and sensitivity.
+- [ ] Store contracts beside producer code.
+- [ ] Run semantic compatibility checks in pull requests.
+- [ ] Record the released contract version with every producer release.
+- [ ] Separate declared constraints from enforced constraints.
+- [ ] Define reject, quarantine, warn, and observe behavior.
+- [ ] Preserve event IDs across dual-publish migrations.
+- [ ] Emit lineage from orchestrators and processing engines.
+- [ ] Normalize dataset namespaces and retain graph history.
+- [ ] Make lineage event ingestion idempotent.
+- [ ] Connect breaking-change approval to column-level blast radius.
+- [ ] Protect sensitive contracts, payloads, SQL, and lineage metadata.
+- [ ] Measure contract enforcement and lineage coverage.
+
+## Conclusion
+
+A contract turns an expectation into a versioned interface. CI catches structural breaks, runtime controls handle real values, and dual publishing gives consumers time to migrate. Lineage connects each field to downstream jobs and owners while exposing visibility gaps. Together they turn governance into an operating system for safe data change.
+
+## Further Reading
+
+- [Open Data Contract Standard 2.2.2](https://bitol-io.github.io/open-data-contract-standard/v2.2.2/)
+- [Confluent Schema Registry compatibility](https://docs.confluent.io/platform/7.7/schema-registry/fundamentals/schema-evolution.html)
+- [dbt model contracts](https://docs.getdbt.com/docs/mesh/govern/model-contracts)
+- [OpenLineage 1.23.0 specification](https://github.com/OpenLineage/OpenLineage/blob/1.23.0/spec/OpenLineage.md)
+- [OpenLineage 1.23.0 column-lineage facet](https://github.com/OpenLineage/OpenLineage/blob/1.23.0/spec/facets/ColumnLineageDatasetFacet.json)

@@ -1,0 +1,155 @@
+---
+title: "Production CDC: From PostgreSQL to the Lakehouse"
+summary: "A production design for moving PostgreSQL changes through Debezium and Kafka into a lakehouse without losing ordering, replay safety, or control of database lag."
+publishedAt: "2025-05-18"
+tag: "Data Engineering"
+subtitle: "Build change data capture as a recoverable data system, not a fragile stream of row updates."
+---
+
+Change data capture looks simple in a diagram: read PostgreSQL's write-ahead log, publish changes to Kafka, and write them to a lakehouse. Production is harder. A connector can stop while PostgreSQL keeps producing WAL. A row can change during its first snapshot. Kafka can redeliver an event, and a schema migration can arrive before downstream readers are ready. A production design must handle all of these normal conditions.
+
+## Start with the Business Requirement
+
+Assume an order service stores data in PostgreSQL. Analytics teams need changes in the lakehouse within minutes, while other services need reliable order events. The application cannot pause for the initial copy, and a retry must not create a second logical update.
+
+The design needs five properties:
+
+- the source database remains the system of record,
+- the initial snapshot and live changes form one complete history,
+- consumers can replay events safely,
+- schema changes follow a controlled rollout,
+- and operators can see when CDC is harming PostgreSQL.
+
+## Reference Architecture
+
+```text
+ Order service
+      |
+      | one database transaction
+      v
++-------------------------+
+| PostgreSQL              |
+| orders + outbox_events  |
+| WAL + replication slot  |
++------------+------------+
+             |
+             v
++-------------------------+       +------------------+
+| Debezium connector      | ----> | Kafka topics     |
+| snapshot + WAL stream   |       | schema registry  |
++-------------------------+       +---------+--------+
+                                            |
+                         +------------------+------------------+
+                         |                                     |
+                         v                                     v
+               Service consumers                    Lakehouse writer
+               idempotent handlers                  raw then curated tables
+                         |                                     |
+                         v                                     v
+               Consumer ledger                     Catalog + object storage
+```
+
+This architecture separates capture, transport, and consumption. Debezium understands PostgreSQL log positions. Kafka provides a durable replay boundary. Each consumer owns its delivery guarantees and storage model.
+
+## Use an Outbox for Business Events
+
+Reading every changed database row is useful for replication, but it is not always a good business event interface. An update to an `orders` row does not explain whether the order was placed, canceled, or corrected by support.
+
+The transactional outbox makes intent explicit. In one PostgreSQL transaction, the application updates the business table and inserts an event ID, aggregate ID, type, version, timestamp, and payload into `outbox_events`. Debezium captures the committed row. This avoids an unsafe database and Kafka dual write because both database records commit or neither does.
+
+Use the aggregate ID, such as `order_id`, as the Kafka message key when changes for one order must remain ordered. Global ordering is expensive and usually unnecessary. Ordering per business entity is a clearer and more scalable guarantee.
+
+## Understand Snapshot and WAL Overlap
+
+The first capture cannot rely only on WAL because PostgreSQL normally removes old WAL segments. Debezium first takes a consistent snapshot, records a log position, and then continues streaming from that position.
+
+The important detail is overlap. Imagine the snapshot reads an order with status `PENDING`. While the snapshot is still running, the application changes the same order to `PAID`. The connector must not leave the old snapshot value as the final state.
+
+Incremental snapshots reduce the size of this problem by reading a table in primary-key chunks while streaming continues. Debezium opens a snapshot window for a chunk, buffers its snapshot rows, and compares their keys with live change events. If a newer change for the same key appears, that live event supersedes the buffered snapshot row. The process then continues with the next chunk.
+
+This gives the pipeline a recoverable way to add a large table without blocking live capture. It still requires operational limits. Choose chunk sizes that do not create long database queries, large connector buffers, or excessive I/O on the primary.
+
+## Store Raw Events Before Building Current State
+
+The lakehouse should keep an append-only raw layer containing the full change envelope: source table, log position, operation, event and capture times, before and after values, primary key, schema version, and snapshot status.
+
+A curated layer can then build the current row state using the primary key and a deterministic source order. Keeping raw events makes replay, audit, and new transformations possible without reading PostgreSQL again.
+
+Do not order changes only by connector arrival time. Restarts and network delay can change arrival order. Use source transaction metadata and a clear tie-breaking rule. For deleted rows, preserve a delete marker long enough for every current-state table and downstream index to apply it.
+
+## Make Every Consumer Idempotent
+
+Kafka and connectors can redeliver records after failures. A consumer should assume at-least-once delivery even when parts of the platform offer stronger transaction support.
+
+For a service consumer, create a small ledger keyed by `event_id`. Apply the business change and record the processed event in one local database transaction. A duplicate event then returns the stored result or becomes a no-op.
+
+For a lakehouse consumer, derive a stable identity from the source record, table, primary key, and source position. A retry should produce the same logical merge. Batch commits should record the Kafka offset range or another input checkpoint alongside the output snapshot so an operator can reconcile what was consumed.
+
+If a connection fails after an external side effect, do not immediately repeat it. First query the target system using the event ID or business reference. An unknown outcome needs reconciliation, not a blind retry.
+
+## Roll Out Schemas in Compatible Steps
+
+PostgreSQL logical decoding does not provide a complete, portable DDL history for consumers. Treat database migrations and event schemas as separate controlled artifacts.
+
+For an optional field, deploy tolerant consumers before the producer. For a rename or type change, publish old and new fields during a transition. Remove the old field only after usage data shows it is safe.
+
+Use a schema registry with a deliberate compatibility mode and run its rules in CI. Keep payloads versioned, and declare which versions each transformation accepts. A dead-letter topic preserves failures, but it is not a schema strategy.
+
+## Protect PostgreSQL from Replication Slot Risk
+
+A logical replication slot retains WAL until the connector confirms consumption. This protects CDC from data loss during a short outage, but it can consume the database disk during a long outage.
+
+Monitor retained WAL bytes, confirmed log position, connector heartbeat age, snapshot progress, Kafka publish errors, and free disk space. Alert on both lag and its rate of growth. A static lag threshold can be too late when write traffic suddenly increases.
+
+Define an emergency policy before the incident. The choice may be to restore the connector, add temporary disk capacity, reduce nonessential write load, or deliberately drop and rebuild the slot. Dropping the slot discards the protected log position and normally requires a new snapshot, so it must be an explicit data-loss decision.
+
+## Plan Database Failover
+
+PostgreSQL 17 added support for synchronizing logical failover slots to a physical standby. A production design must enable the slot for failover, configure slot synchronization on the standby, and verify that the slot is synchronized before promotion.
+
+Synchronization is not magic. It is asynchronous, and the standby must be ahead of the CDC consumer at failover time. Test planned and unplanned promotion. Confirm the connector resumes from the expected source position, and compare a known source count or checksum after recovery.
+
+## Failure Modes and Responses
+
+| Failure mode | Risk | Safe response |
+| --- | --- | --- |
+| Connector stops while PostgreSQL is busy | WAL fills database storage | Alert on retained bytes and growth rate, restore capture, then follow the documented slot recovery policy |
+| Snapshot row overlaps a live update | Old state can appear after new state | Use supported snapshot window behavior and order curated state by source coordinates |
+| Kafka record is delivered twice | Duplicate side effect or duplicate row | Deduplicate by stable event ID and commit the ledger with the local effect |
+| Schema changes before consumers are ready | Deserialization or silent meaning changes | Check compatibility in CI and use additive, dual-field rollout |
+| Database primary fails | Missing or repeated change range | Use synchronized failover slots, verify readiness, and reconcile source positions after promotion |
+| Lakehouse commit result is unclear | Retry may duplicate a batch | Read the table's committed snapshot or batch ledger before retrying |
+
+## Security and Operations
+
+Use a dedicated least-privilege replication user. Protect Kafka with TLS, client authentication, and topic authorization. Separate sensitive raw topics from public business events.
+
+Runbooks should cover connector and snapshot restart, slot growth, poison records, incompatible schemas, broker outage, lakehouse commit failure, and database promotion. Dashboards should join source write rate, connector and consumer lag, rejection count, and lakehouse freshness.
+
+## Implementation Checklist
+
+- [ ] Define which tables need row replication and which actions need business events.
+- [ ] Write business state and outbox events in one PostgreSQL transaction.
+- [ ] Give every event a stable ID and version.
+- [ ] Key Kafka records by the entity that requires ordering.
+- [ ] Size snapshots in chunks and test changes during each snapshot window.
+- [ ] Preserve source coordinates in the raw lakehouse layer.
+- [ ] Make service and lakehouse consumers idempotent.
+- [ ] Validate schema compatibility in CI.
+- [ ] Document additive, breaking, and dual-publish migrations.
+- [ ] Alert on replication slot WAL retention and database free space.
+- [ ] Configure and test PostgreSQL failover slot synchronization.
+- [ ] Use least-privilege credentials and topic authorization.
+- [ ] Practice replay and reconciliation without reading the source again.
+
+## Conclusion
+
+Production CDC is a chain of recovery agreements between PostgreSQL, Debezium, Kafka, and every consumer. The log gives changes durable order, the outbox gives events atomic intent, and Kafka provides replay. Idempotent consumers make that replay safe. Raw storage preserves evidence, while monitoring and failover design protect the source. With a clear identity and recovery rule at each boundary, CDC becomes safe to restart.
+
+## Further Reading
+
+- [Debezium 3.0 PostgreSQL connector](https://debezium.io/documentation/reference/3.0/connectors/postgresql.html)
+- [Debezium 3.0 outbox event router](https://debezium.io/documentation/reference/3.0/transformations/outbox-event-router.html)
+- [PostgreSQL 17 logical replication](https://www.postgresql.org/docs/17/logical-replication.html)
+- [PostgreSQL 17 release notes](https://www.postgresql.org/docs/17/release-17.html)
+- [Apache Kafka design and delivery semantics](https://kafka.apache.org/40/design/design/)

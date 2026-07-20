@@ -1,0 +1,201 @@
+---
+title: "How to Build Durable AI Agents That Survive Failures"
+summary: "A practical architecture for agents that can recover from crashes, retry safely, wait for people, and continue long-running work without repeating side effects."
+publishedAt: "2025-12-14"
+tag: "AI Automation"
+subtitle: "Design the agent as a durable workflow, not a fragile loop running inside one process."
+---
+
+An AI agent can look reliable in a demo and still be unsafe in production. The difference usually appears when the agent performs real work.
+
+Imagine an operations agent that reviews an invoice, checks a purchase order, asks a manager for approval, updates an accounting system, and sends a confirmation email. The full run may take twenty minutes or two days. During that time, a model request can time out, a worker can restart, an API can return an unclear response, or the manager can wait until tomorrow.
+
+The worst failure is not always a stopped workflow. A more dangerous failure happens when the workflow resumes and repeats an action. The invoice is paid twice, the ticket is created twice, or two emails claim that the same task finished.
+
+A durable agent must answer three questions:
+
+1. What work has definitely completed?
+2. What can be retried safely?
+3. Where should execution continue after a failure?
+
+Those questions are system design questions. A better prompt cannot solve them.
+
+## The Core Design
+
+Treat the agent as a durable state machine. Keep coordination in a workflow layer, and execute uncertain external work through isolated activities. The workflow stores progress after meaningful steps. If a process disappears, another worker can reconstruct the state and continue.
+
+```text
+                         +----------------------+
+User or scheduler -----> | Durable workflow     |
+                         | Agent state machine   |
+                         +----------+-----------+
+                                    |
+                    +---------------+----------------+
+                    |               |                |
+                    v               v                v
+              +-----------+   +-----------+   +-------------+
+              | Model     |   | Tool      |   | Approval    |
+              | activity  |   | activity  |   | signal      |
+              +-----+-----+   +-----+-----+   +------+------+
+                    |               |                |
+                    v               v                v
+              Model API       Business APIs      Human UI
+                    |               |
+                    +-------+-------+
+                            |
+                            v
+                  +-------------------+
+                  | Event history and |
+                  | checkpoint store  |
+                  +-------------------+
+```
+
+This design separates two kinds of logic.
+
+The workflow decides what should happen next. It tracks the current step, attempt count, approval state, deadlines, and references to completed results. The activities call systems outside the workflow, such as a model provider, database, payment API, or email service.
+
+That boundary matters. Workflow code should be deterministic enough to rebuild state from recorded history. Network calls, random values, and changing clocks belong in activities or in controlled workflow APIs. A replayed workflow must reach the same decision from the same recorded events.
+
+## Model the Run as Explicit State
+
+Do not use a chat transcript as the only source of truth. A transcript can explain the conversation, but it is a poor transaction record.
+
+Store structured workflow state such as:
+
+- workflow ID and business operation ID
+- current step and status
+- model and prompt version
+- validated facts collected so far
+- tool requests and their idempotency keys
+- approval request, approver, and decision
+- retry count and last error class
+- references to large inputs and outputs
+- final outcome and completion time
+
+Use a stable workflow ID based on the business object. An invoice process might use invoice-review:tenant-42:invoice-9182. A second start request with the same identity can return the existing run instead of creating a competing run.
+
+State transitions should also be explicit. Useful states include RECEIVED, ANALYZING, WAITING_FOR_INPUT, WAITING_FOR_APPROVAL, EXECUTING_ACTION, VERIFYING, COMPLETED, FAILED, and CANCELED. This makes dashboards, alerts, and recovery tools much clearer than a generic running flag.
+
+## Checkpoint at Business Boundaries
+
+A checkpoint is most useful after a result becomes expensive or dangerous to repeat. Good boundaries include:
+
+- after document extraction has been validated
+- after a model creates a structured plan
+- after a tool returns a confirmed result
+- before and after a human approval
+- before and after an irreversible action
+
+Do not checkpoint every token. That creates storage noise and couples recovery to low-level model output. Store the result of a completed model turn, the selected tool call, and the confirmed tool result.
+
+Frameworks implement durability in different ways. Temporal records workflow events and replays workflow code. LangGraph uses persistent checkpoints for graph state. The product choice matters less than the guarantee: completed steps must survive worker loss, and resumed execution must not guess what happened.
+
+## Retries Need a Failure Policy
+
+Retries are useful only when the system knows what kind of failure occurred. A blanket retry loop can turn a small incident into duplicate business actions.
+
+| Failure mode | Safe response | Why |
+| --- | --- | --- |
+| Model API returns 429 | Retry with bounded backoff and jitter | No business side effect occurred |
+| Tool returns 400 validation error | Do not retry unchanged input | The request is invalid |
+| Worker crashes before calling a tool | Resume and call with the same idempotency key | The action was not started |
+| Connection drops after a payment request | Query payment status before retrying | The remote action may have succeeded |
+| Approval deadline expires | Move to an escalation or canceled state | Waiting forever hides stuck work |
+| Model returns invalid structured output | Retry with a repair prompt up to a limit | The failure may be corrected, but loops need a cap |
+
+Set separate limits for model calls, read tools, and write tools. A read request can often tolerate more retries. A high-risk write should have a short, careful policy and a reconciliation step.
+
+Respect provider hints such as Retry-After. Add jitter so a fleet of workers does not retry at the same moment. Use circuit breakers when a dependency is broadly unhealthy. The workflow should wait durably during backoff instead of holding a worker or open connection.
+
+## Make Every Side Effect Idempotent
+
+Idempotency means that repeating a request has the same business effect as making it once. It is the central safety property for a recoverable agent.
+
+Create an idempotency key before the write, persist it in workflow state, and send the same key on every attempt. A useful key combines the workflow ID, step name, and logical action version:
+
+```text
+invoice-review:tenant-42:invoice-9182:submit-payment:v1
+```
+
+The receiving service should store the key with the result and return that result when the key appears again. If the external API does not support idempotency, put a small action service in front of it. That service can maintain an operation ledger with states such as PLANNED, SENT, CONFIRMED, and UNKNOWN.
+
+UNKNOWN deserves special care. It means the request left your system, but the reply did not return. Do not immediately send it again. First reconcile by querying the downstream system with a business reference. If no query exists, route the action to manual review.
+
+For database changes, use a unique constraint on the operation ID. For event publication, use a transactional outbox. Write the business update and an outbox record in one database transaction, then let a publisher deliver the event at least once. Consumers should deduplicate with the event ID.
+
+Exactly-once delivery across independent systems is rarely a realistic promise. Durable workflows normally combine at-least-once execution with idempotent effects and reconciliation.
+
+## Human Approval Is a Durable Event
+
+Human input should not be represented by a sleeping web request. Create an approval record and pause the workflow. A later signal or update carries the decision back to the running instance.
+
+The approval request should show:
+
+- the proposed action
+- the exact important arguments
+- the reason the agent selected it
+- the data sources used
+- the risk level
+- the deadline and escalation path
+
+Bind the response to the workflow ID, action digest, approver identity, and approval version. If the action changes after approval, invalidate the old approval. This prevents an approved small refund from being reused for a larger one.
+
+Handle duplicate approval messages safely. Store a decision ID and reject conflicting second decisions. Authenticate the approval endpoint, authorize the approver for the business object, and keep an audit event without exposing unnecessary private content.
+
+## Control History and Context Growth
+
+Long-running agents collect two different histories. Workflow history proves what executed. Model context helps the model decide what to do next. They should not be the same unbounded document.
+
+Keep large files and verbose model outputs in object storage. Put immutable references and content hashes in workflow state. Periodically create a structured context summary that preserves decisions, open questions, evidence IDs, and tool results. Never delete the durable audit facts needed to explain a side effect.
+
+For very long runs, start a new workflow segment while carrying forward compact state. Temporal calls this pattern Continue-As-New. Other runtimes provide similar checkpoint or thread rotation patterns. The goal is bounded replay time and bounded model context.
+
+## Security and Operational Recovery
+
+Durability should not make credentials durable. Store secret references, not raw tokens, in workflow history. Fetch short-lived credentials inside an activity. Encrypt sensitive payloads, restrict who can inspect histories, and redact model and tool content from logs.
+
+Cancellation also needs design. A cancel request should stop future steps, but it cannot erase an action already committed in another system. Define compensating actions where possible, such as canceling a reservation. For irreversible work, expose the confirmed state and require an operator decision.
+
+Test recovery directly:
+
+- terminate a worker before an activity starts
+- terminate it after the external request but before the response is stored
+- send the same approval twice
+- replay a completed start request
+- return invalid model output repeatedly
+- let a timer expire during a deployment
+- change workflow code while old runs still exist
+
+Workflow versioning is important because replay may execute new code against old history. Use the runtime's safe versioning mechanism, and keep compatible workers available until older executions finish or migrate.
+
+## Implementation Checklist
+
+- [ ] Give every run a stable business workflow ID.
+- [ ] Define explicit states and terminal outcomes.
+- [ ] Separate deterministic coordination from external activities.
+- [ ] Persist progress after meaningful business steps.
+- [ ] Classify errors before retrying them.
+- [ ] Use bounded backoff, jitter, timeouts, and circuit breakers.
+- [ ] Create idempotency keys before all side effects.
+- [ ] Reconcile ambiguous outcomes instead of blindly retrying.
+- [ ] Store human approval as an authenticated, versioned event.
+- [ ] Keep secrets and large payloads out of workflow history.
+- [ ] Bound workflow history and model context separately.
+- [ ] Support cancellation, compensation, and manual recovery.
+- [ ] Test worker loss at every side-effect boundary.
+- [ ] Plan safe workflow code upgrades.
+
+## Conclusion
+
+A production agent is not just a model inside a loop. It is a distributed workflow that crosses unreliable networks, changing services, and human timelines.
+
+Durable execution gives the agent a reliable memory of completed work. Idempotency makes repetition safe. Reconciliation handles uncertain outcomes. Explicit approval events let people participate without keeping a process alive. Together, these patterns turn failure from a dangerous surprise into a normal state transition.
+
+The best recovery is quiet. A worker disappears, another worker resumes, completed work remains completed, and no customer sees the same action twice.
+
+## Further Reading
+
+- [Temporal workflow lifecycle](https://github.com/temporalio/temporal/blob/main/docs/architecture/workflow-lifecycle.md)
+- [Temporal AI engineering reference architecture](https://go.temporal.io/platform-hub/ai-engineering)
+- [LangGraph persistence and durable execution](https://docs.langchain.com/oss/python/langgraph/persistence)
+- [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)

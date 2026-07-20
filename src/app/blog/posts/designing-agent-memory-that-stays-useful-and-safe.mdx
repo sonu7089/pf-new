@@ -1,0 +1,173 @@
+---
+title: "Designing Agent Memory That Stays Useful and Safe"
+summary: "A production architecture for agent memory that stays relevant, survives change, supports deletion, and resists poisoned or stale information."
+publishedAt: "2025-12-28"
+tag: "AI Architecture"
+subtitle: "Treat memory as a governed data system, not a growing transcript that the model can rewrite at will."
+---
+
+Memory can turn a one-time assistant into a useful long-term agent. It can remember a user's preferred report format, continue an unfinished task, and reuse a successful way to solve a recurring problem.
+
+It can also preserve the wrong address, revive an expired instruction, expose one customer's facts to another, or save hostile text from a webpage as trusted guidance. These failures are hard to notice because the agent may sound confident while using bad memory.
+
+The production problem is not simply how to store more text. It is how to decide what deserves to be remembered, retrieve only what is relevant, prove where it came from, correct it, and remove every derived copy when required.
+
+A strong memory system treats each memory as governed data. The model may propose a memory, but deterministic services own validation, storage, access, versioning, and deletion.
+
+## Separate Memory by Purpose
+
+Working, episodic, and semantic memory solve different problems. Putting them in one vector index makes access easy, but removes useful control.
+
+Working memory holds the active goal, confirmed constraints, current plan, tool results, and open questions for one thread. It should be checkpointed so a run can resume, but it normally expires with the thread.
+
+Episodic memory records useful past events. Store the task, important decisions, evidence references, tool outcomes, and final result. Do not store hidden model reasoning. A later agent can retrieve a verified example without treating every old conversation as a rule.
+
+Semantic memory stores facts such as a user's language, approved shipping address, or team ownership. Facts need a subject, source, validity period, and status. "The customer uses weekly reports" is incomplete unless the system also knows which customer said it, when, and whether a newer choice replaced it.
+
+Procedures and safety policy should remain developer-controlled configuration. An agent should not silently convert one successful episode into a permanent operating rule.
+
+## A Governed Memory Architecture
+
+The main design separates the fast inference path from the durable write path. Retrieval can be quick, while memory creation receives stricter checks.
+
+```text
+ User or event
+      |
+      v
+ +----------------+       +-------------------+
+ | Agent runtime  |<------| Context assembler |
+ +---+---------+--+       +---------+---------+
+     |         |                    ^
+     |         v                    |
+     |   +------------+      +------+-------+
+     |   | Working    |      | Retrieval and|
+     |   | checkpoint |      | reranking    |
+     |   +------+-----+      +------+-------+
+     |          |                   |
+     v          v                   |
+ +-------------------+       +------+-------+
+ | Memory candidate  |       | Semantic and|
+ | write policy      |       | episodic views|
+ +---------+---------+       +------+-------+
+           |                        ^
+           v                        |
+ +-------------------+       +------+-------+
+ | Validation and    |------>| Versioned    |
+ | approval          |       | memory log   |
+ +-------------------+       +------+-------+
+                                    |
+                         +----------+----------+
+                         | Privacy, deletion,  |
+                         | audit, and eval jobs|
+                         +---------------------+
+```
+
+The source of truth has two parts. An append-only log keeps non-sensitive audit metadata and version transitions. It points to an erasable payload store that holds approved content, ideally encrypted with a record or subject key. Search indexes and compact profiles are derived views. If an index is lost or a new embedding model is adopted, the system can rebuild it from active payloads and their approved metadata.
+
+This separation also improves recovery. A failed index update does not lose the memory. A bad compaction can be rolled back. A deletion request can find every projection created from the original record.
+
+## Give Every Memory a Contract
+
+A plain text field is not enough. A practical record identifies the memory, tenant, subject, and type. Its erasable payload carries a normalized value and display text. Durable metadata carries the source reference, trust level, observation time, validity range, writer policy, extractor, prompt, model, and schema versions. Status, sensitivity, retention, expiry, a keyed content hash, and the ID of any superseded record complete the contract.
+
+Append an immutable metadata event for each change instead of overwriting history. Keep the content payload separately erasable. A correction creates a new payload version and marks the older version as superseded. This preserves useful audit history without letting the old value enter normal retrieval or making deleted personal content permanent.
+
+Create a stable write key before validation. A useful key combines the tenant, subject, source event, semantic field or stable candidate ID, canonical value hash, memory type, and extractor version. One event can then produce several facts without collision, while a repeated candidate returns the existing result. This prevents retries from creating duplicate facts.
+
+Conflicting facts should remain visible to the control plane. If two recent, trusted sources disagree about an address, mark the subject as disputed and ask for confirmation. Picking whichever embedding is closest hides a business conflict inside a search score.
+
+## Compact Working Memory Without Losing Truth
+
+Long threads cannot grow forever. More context increases cost and can make important instructions harder to find. Compaction should reduce active context while keeping the durable record intact.
+
+Compact at clear boundaries, such as after a tool result, approval, or completed subtask. The compact form should preserve the goal, user constraints, confirmed facts, decisions, evidence IDs, side effects, and unresolved questions. Drop greetings, repeated explanations, and superseded plans.
+
+Store the compaction as a derived artifact with its input checkpoint range, algorithm version, and hash. Never replace the raw event history with the summary. Before promoting a new compactor, run it in shadow mode and compare required-fact preservation against the current version.
+
+If compaction fails, keep using the last valid checkpoint and retry in the background. If validation detects a missing constraint, quarantine the new summary. This is safer than letting a damaged summary become the only state from which the agent continues.
+
+## Make Memory Writes a Policy Decision
+
+The agent should emit a structured candidate, not write directly to long-term storage. The write policy asks whether the information will be useful after the thread, where it came from, and whether it is a fact, experience, or attempted instruction. It also checks for secrets, sensitive personal data, consent, a valid retention purpose, and conflicts with active memory.
+
+Direct, explicit user preferences may be accepted after schema checks. Facts extracted from approved systems may need source verification. Text from email, websites, retrieved documents, and tool output should not create durable user facts or procedures by itself.
+
+High-risk candidates can enter quarantine for user or operator review. Low-value candidates should simply expire. A conservative write policy is useful because one false memory can affect many future sessions.
+
+## Retrieve With Scope Before Similarity
+
+Retrieval begins with hard filters. Select the tenant, subject, allowed memory types, active status, sensitivity level, and validity time before running semantic search. This prevents a globally similar record from crossing a security boundary.
+
+Then combine exact fields, keyword search, semantic similarity, recency, source trust, and task relevance. Rerank a small candidate set and apply a token budget. Return several independent facts when diversity matters, but do not flood the prompt with near duplicates.
+
+Every retrieved item should carry a data envelope that says it is memory, not an instruction. Include its provenance and age. The context assembler places developer policy first, current user intent next, and retrieved memory in a clearly marked data section. Memory can inform a decision, but it cannot grant a capability or authorize a write.
+
+Record context lineage: which memory IDs were placed in model context and which were explicitly referenced by deterministic action logic. This does not prove what influenced a model response, but it makes wrong answers more debuggable and lets a deletion or correction find affected cached artifacts.
+
+## Design Deletion as a Distributed Workflow
+
+Deleting one database row is not enough. A memory may appear in the event store, vector index, profile document, cache, analytics export, evaluation sample, and backup.
+
+Maintain a derivation registry that maps an original memory ID to every projection. A deletion request gets its own idempotency key and tombstone generation, then moves through REQUESTED, TOMBSTONED, PURGED, VERIFIED, and COMPLETE. Tombstoning immediately blocks retrieval. Every indexer, compactor, and rebuild job must check the latest generation before publishing with a guarded write. Verification waits for older in-flight jobs to finish, then proves that searches no longer return the item. This prevents delayed work from recreating deleted memory.
+
+Keep audit evidence minimal. Delete the content payload or destroy its encryption key. It may be enough to retain the deletion request, actor, policy, timestamps, and a nonreversible reference instead of the deleted content. Backups need a documented policy too. Restored data should be passed through a durable deletion ledger before serving traffic. Legal duties differ by jurisdiction, so privacy and legal teams should set the actual retention rules.
+
+## Protect Memory From Poisoning
+
+Research published before this article showed that attackers can target an agent's long-term memory. A malicious interaction can create a record that is retrieved later for a different user or task.
+
+Reduce that risk with narrow write identities, tenant isolation, provenance, and a default rule that untrusted source content cannot become instructions. Scan candidates, but do not depend on a classifier alone. A novel attack may look like normal prose.
+
+Separate the model that reads hostile content from the service that approves memory. Never let a retrieved memory approve another memory write. Rate-limit write candidates, alert on sudden overwrite patterns, and require confirmation before replacing sensitive facts. Procedures should use signed, developer-managed versions rather than self-written memory.
+
+## Failure Modes and Recovery
+
+| Failure mode | Immediate behavior | Recovery |
+| --- | --- | --- |
+| Index update fails after commit | Exclude the record from search | Replay the index job from the log |
+| Compaction loses a constraint | Reject the summary | Restore the checkpoint and quarantine that version |
+| Write outcome is unknown | Reuse the candidate key | Query by key before retrying |
+| Trusted facts conflict | Mark them disputed | Ask the subject or approved source |
+| Poison is discovered | Disable related projections | Trace contexts and side effects, purge data, then review, revoke, or compensate affected actions |
+| Deletion stops midway | Keep the tombstone | Resume with the same request ID |
+
+Operational dashboards should track candidate acceptance, conflict rate, retrieval with no useful result, stale-memory use, index lag, compaction rejection, deletion age, and cross-tenant access denials. Alerts should point to a recoverable state, not just a model response.
+
+## Evaluate the Whole Memory Loop
+
+Measure writing, storage, retrieval, and use separately. A good answer can hide a poor write policy, while a good retrieval score can still lead to an unsafe action.
+
+Build test cases for explicit preferences, corrections, expired facts, conflicts, long threads, multiple tenants, untrusted documents, and deletion. Check write precision, required-fact recall after compaction, correct-version retrieval, provenance coverage, and whether the final action respects current intent.
+
+Add adversarial cases that try to save instructions, overwrite another subject, hide text in retrieved content, or make one memory authorize a tool. Run candidate policies in shadow mode on recorded, redacted traffic. Release only when utility tests and security tests both pass.
+
+## Implementation Checklist
+
+- [ ] Separate working, episodic, and semantic memory.
+- [ ] Keep procedures under developer control.
+- [ ] Filter by tenant and subject before search.
+- [ ] Store provenance, validity, sensitivity, and versions.
+- [ ] Append versions and make writes idempotent.
+- [ ] Put policy before durable writes.
+- [ ] Preserve raw checkpoints during compaction.
+- [ ] Track memories used by important actions.
+- [ ] Tombstone, purge, and verify deletion.
+- [ ] Test poisoning, conflicts, recovery, and migrations.
+
+## Conclusion
+
+Useful memory is selective, scoped, and correctable. Safe memory is also traceable, removable, and unable to grant itself authority.
+
+The key design choice is to keep the model away from direct control of durable state. Let it propose candidates and use retrieved facts, while normal services enforce schemas, access, versions, retention, and deletion. Keep an immutable source of truth and rebuildable views so failures can be repaired.
+
+With those boundaries, memory becomes a reliable part of the agent architecture instead of an invisible prompt that grows risk with every conversation.
+
+## Further Reading
+
+- [Cognitive Architectures for Language Agents, 2023](https://arxiv.org/abs/2309.02427)
+- [MemGPT: Towards LLMs as Operating Systems, 2023](https://arxiv.org/abs/2310.08560)
+- [Generative Agents: Interactive Simulacra of Human Behavior, 2023](https://arxiv.org/abs/2304.03442)
+- [Effective context engineering for AI agents, September 2025](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [A Practical Memory Injection Attack against LLM Agents, 2025](https://arxiv.org/abs/2503.03704)
+- [AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases, 2024](https://arxiv.org/abs/2407.12784)
+- [NIST Privacy Framework 1.0, 2020](https://www.nist.gov/privacy-framework/privacy-framework)
